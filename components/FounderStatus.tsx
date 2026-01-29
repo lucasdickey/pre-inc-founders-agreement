@@ -45,7 +45,12 @@ export default function FounderStatus({
                     </span>
                   )}
                 </p>
-                <p className="text-sm text-gray-500">{founder.email}</p>
+                <p className="text-sm text-gray-500">
+                  {founder.email}
+                  {founder.email === "jamie@example.com" && (
+                    <span className="ml-1 text-xs text-amber-600">(Demo)</span>
+                  )}
+                </p>
               </div>
             </div>
             <div>
