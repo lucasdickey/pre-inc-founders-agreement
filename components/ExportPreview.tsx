@@ -65,8 +65,8 @@ export default function ExportPreview({ agreementId }: ExportPreviewProps) {
   if (loading) {
     return (
       <div className="card animate-pulse">
-        <div className="h-8 bg-gray-200 rounded w-1/3 mb-4" />
-        <div className="h-64 bg-gray-100 rounded" />
+        <div className="h-5 bg-stripe-border rounded w-1/3 mb-4" />
+        <div className="h-64 bg-stripe-gray-50 rounded" />
       </div>
     );
   }
@@ -74,7 +74,7 @@ export default function ExportPreview({ agreementId }: ExportPreviewProps) {
   if (error || !exports) {
     return (
       <div className="card">
-        <p className="text-red-600">
+        <p className="text-sm text-red-600">
           {error || "Failed to load export preview"}
         </p>
       </div>
@@ -89,13 +89,13 @@ export default function ExportPreview({ agreementId }: ExportPreviewProps) {
     },
     {
       id: "yaml",
-      label: "YAML Data",
-      description: "Machine-readable for Atlas import",
+      label: "YAML",
+      description: "For Atlas import",
     },
     {
       id: "legal",
-      label: "Legal Document",
-      description: "Formal agreement format",
+      label: "Legal",
+      description: "Formal agreement",
     },
   ];
 
@@ -108,14 +108,16 @@ export default function ExportPreview({ agreementId }: ExportPreviewProps) {
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Export Preview</h2>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-lg font-semibold text-stripe-slate">
+          Export preview
+        </h2>
         <button
           onClick={() => downloadFile(activeTab)}
-          className="btn-secondary text-sm px-4 py-2 flex items-center gap-2"
+          className="btn-secondary flex items-center gap-1.5"
         >
           <svg
-            className="w-4 h-4"
+            className="w-3.5 h-3.5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -132,15 +134,17 @@ export default function ExportPreview({ agreementId }: ExportPreviewProps) {
       </div>
 
       {/* Tabs */}
-      <div className="export-tabs mb-4">
+      <div className="export-tabs mb-5">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`export-tab ${activeTab === tab.id ? "active" : ""}`}
           >
-            <span className="block">{tab.label}</span>
-            <span className="text-xs opacity-70">{tab.description}</span>
+            <span className="block text-[13px]">{tab.label}</span>
+            <span className="block text-[11px] opacity-60">
+              {tab.description}
+            </span>
           </button>
         ))}
       </div>
@@ -150,23 +154,23 @@ export default function ExportPreview({ agreementId }: ExportPreviewProps) {
         {currentContent}
       </div>
 
-      {/* Download all button */}
-      <div className="mt-4 pt-4 border-t flex justify-end gap-2">
+      {/* Download options */}
+      <div className="mt-4 pt-4 border-t border-stripe-border flex justify-end gap-1">
         <button
           onClick={() => downloadFile("yaml")}
-          className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1"
+          className="text-xs text-stripe-gray-500 hover:text-stripe-slate px-3 py-1.5 rounded-md hover:bg-stripe-gray-50 transition-colors"
         >
           Download YAML
         </button>
         <button
           onClick={() => downloadFile("markdown")}
-          className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1"
+          className="text-xs text-stripe-gray-500 hover:text-stripe-slate px-3 py-1.5 rounded-md hover:bg-stripe-gray-50 transition-colors"
         >
           Download MD
         </button>
         <button
           onClick={() => downloadFile("legal")}
-          className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1"
+          className="text-xs text-stripe-gray-500 hover:text-stripe-slate px-3 py-1.5 rounded-md hover:bg-stripe-gray-50 transition-colors"
         >
           Download Legal
         </button>

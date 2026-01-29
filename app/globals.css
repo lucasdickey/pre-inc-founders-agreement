@@ -4,10 +4,12 @@
 
 :root {
   --foreground: #0a2540;
-  --background: #ffffff;
+  --background: #f6f9fc;
   --stripe-purple: #635bff;
   --stripe-purple-dark: #5851ea;
   --stripe-cyan: #00d4ff;
+  --stripe-border: #e3e8ee;
+  --stripe-gray-50: #f6f9fc;
 }
 
 body {
@@ -19,9 +21,15 @@ body {
     "Segoe UI",
     Roboto,
     "Helvetica Neue",
-    Arial,
+    Ubuntu,
     sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ========================================
+   Stripe Atlas Design System
+   ======================================== */
 
 /* Chat styles */
 .chat-container {
@@ -29,32 +37,32 @@ body {
 }
 
 .chat-messages {
-  @apply flex-1 overflow-y-auto p-4 space-y-4;
+  @apply flex-1 overflow-y-auto p-6 space-y-4;
 }
 
 .chat-message {
-  @apply max-w-[80%] p-4 rounded-2xl;
+  @apply max-w-[80%] p-4 rounded-lg text-[15px] leading-relaxed;
 }
 
 .chat-message.user {
-  @apply bg-stripe-purple text-white ml-auto rounded-br-md;
+  @apply bg-stripe-purple text-white ml-auto;
 }
 
 .chat-message.assistant {
-  @apply bg-gray-100 text-gray-800 mr-auto rounded-bl-md;
+  @apply bg-white border border-stripe-border text-stripe-slate mr-auto;
 }
 
 .chat-input-container {
-  @apply border-t p-4 bg-white;
+  @apply border-t border-stripe-border p-4 bg-white;
 }
 
 /* Progress tracker */
 .progress-step {
-  @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm;
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors;
 }
 
 .progress-step.completed {
-  @apply bg-green-50 text-green-700;
+  @apply text-stripe-green;
 }
 
 .progress-step.current {
@@ -62,16 +70,16 @@ body {
 }
 
 .progress-step.pending {
-  @apply text-gray-400;
+  @apply text-stripe-gray-200;
 }
 
 /* Export preview tabs */
 .export-tabs {
-  @apply flex border-b;
+  @apply flex border-b border-stripe-border;
 }
 
 .export-tab {
-  @apply px-4 py-2 text-sm font-medium border-b-2 border-transparent cursor-pointer;
+  @apply px-5 py-3 text-sm font-medium border-b-2 border-transparent cursor-pointer transition-colors;
 }
 
 .export-tab.active {
@@ -79,26 +87,31 @@ body {
 }
 
 .export-tab:not(.active) {
-  @apply text-gray-500 hover:text-gray-700;
+  @apply text-stripe-gray-500 hover:text-stripe-slate;
 }
 
 /* Code/document preview */
 .document-preview {
-  @apply bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto whitespace-pre-wrap;
+  @apply bg-stripe-gray-50 border border-stripe-border p-5 rounded-lg font-mono text-sm overflow-x-auto whitespace-pre-wrap text-stripe-slate-light;
 }
 
-/* Button styles */
+/* Button styles — Stripe uses rounded-md, not full pills */
 .btn-primary {
-  @apply bg-stripe-purple hover:bg-stripe-purple-dark text-white px-6 py-3 rounded-full font-medium transition-colors;
+  @apply bg-stripe-purple hover:bg-stripe-purple-dark text-white px-5 py-2.5 rounded-md font-medium text-sm transition-all shadow-stripe-sm hover:shadow-stripe;
 }
 
 .btn-secondary {
-  @apply bg-white hover:bg-gray-50 text-stripe-purple border border-stripe-purple px-6 py-3 rounded-full font-medium transition-colors;
+  @apply bg-white hover:bg-stripe-gray-50 text-stripe-slate border border-stripe-border px-5 py-2.5 rounded-md font-medium text-sm transition-all shadow-stripe-sm hover:shadow-stripe;
 }
 
-/* Card styles */
+/* Card styles — Stripe uses subtle borders, not heavy shadows */
 .card {
-  @apply bg-white rounded-2xl shadow-lg border border-gray-100 p-6;
+  @apply bg-white rounded-lg shadow-stripe border border-stripe-border p-6;
+}
+
+/* Input styles */
+.input-stripe {
+  @apply w-full px-3.5 py-2.5 bg-white border border-stripe-border rounded-md text-sm text-stripe-slate transition-shadow focus:outline-none focus:border-stripe-purple focus:shadow-stripe-focus;
 }
 
 /* Loading animation */
@@ -107,7 +120,7 @@ body {
 }
 
 .typing-indicator span {
-  @apply w-2 h-2 bg-gray-400 rounded-full animate-bounce;
+  @apply w-2 h-2 bg-stripe-gray-200 rounded-full animate-bounce;
 }
 
 .typing-indicator span:nth-child(2) {
@@ -116,4 +129,35 @@ body {
 
 .typing-indicator span:nth-child(3) {
   animation-delay: 0.2s;
+}
+
+/* Stripe Atlas dark hero gradient */
+.atlas-hero {
+  background: linear-gradient(
+    135deg,
+    #0a2540 0%,
+    #1a1f71 50%,
+    #0a2540 100%
+  );
+}
+
+/* Subtle gradient mesh overlay */
+.atlas-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+      ellipse at 20% 50%,
+      rgba(99, 91, 255, 0.15) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 80% 20%,
+      rgba(0, 212, 255, 0.1) 0%,
+      transparent 50%
+    );
+  pointer-events: none;
 }

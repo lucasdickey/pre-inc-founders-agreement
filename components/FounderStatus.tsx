@@ -13,49 +13,30 @@ export default function FounderStatus({
 }: FounderStatusProps) {
   return (
     <div className="card">
-      <h3 className="font-semibold mb-4">Founders</h3>
-      <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-stripe-slate mb-3">
+        Founders
+      </h3>
+      <div className="space-y-2">
         {founders.map((founder) => (
           <div
             key={founder.id}
-            className={`flex items-center justify-between p-3 rounded-lg ${
+            className={`flex items-center justify-between p-3 rounded-md ${
               founder.id === currentFounderId
-                ? "bg-stripe-purple/10 border border-stripe-purple/20"
-                : "bg-gray-50"
+                ? "bg-stripe-purple/5 border border-stripe-purple/15"
+                : "bg-stripe-gray-50 border border-transparent"
             }`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${
                   founder.interviewCompleted
-                    ? "bg-green-500"
+                    ? "bg-stripe-green"
                     : founder.id === currentFounderId
                       ? "bg-stripe-purple"
-                      : "bg-gray-400"
+                      : "bg-stripe-gray-200"
                 }`}
               >
-                {founder.name.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="font-medium">
-                  {founder.name}
-                  {founder.id === currentFounderId && (
-                    <span className="text-xs text-stripe-purple ml-2">
-                      (You)
-                    </span>
-                  )}
-                </p>
-                <p className="text-sm text-gray-500">
-                  {founder.email}
-                  {founder.email === "jamie@example.com" && (
-                    <span className="ml-1 text-xs text-amber-600">(Demo)</span>
-                  )}
-                </p>
-              </div>
-            </div>
-            <div>
-              {founder.interviewCompleted ? (
-                <span className="inline-flex items-center gap-1 text-green-600 text-sm">
+                {founder.interviewCompleted ? (
                   <svg
                     className="w-4 h-4"
                     fill="none"
@@ -65,17 +46,45 @@ export default function FounderStatus({
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      strokeWidth={2}
+                      strokeWidth={2.5}
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
+                ) : (
+                  founder.name.charAt(0).toUpperCase()
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-stripe-slate">
+                  {founder.name}
+                  {founder.id === currentFounderId && (
+                    <span className="text-[11px] text-stripe-purple ml-1.5 font-normal">
+                      (You)
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-stripe-gray-500">
+                  {founder.email}
+                  {founder.email === "jamie@example.com" && (
+                    <span className="ml-1 text-[10px] text-amber-600">(Demo)</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div>
+              {founder.interviewCompleted ? (
+                <span className="text-[11px] font-medium text-stripe-green">
                   Complete
                 </span>
               ) : founder.interviewData?.messages &&
                 founder.interviewData.messages.length > 0 ? (
-                <span className="text-amber-600 text-sm">In Progress</span>
+                <span className="text-[11px] font-medium text-amber-600">
+                  In Progress
+                </span>
               ) : (
-                <span className="text-gray-400 text-sm">Not Started</span>
+                <span className="text-[11px] text-stripe-gray-200">
+                  Not Started
+                </span>
               )}
             </div>
           </div>
@@ -83,7 +92,7 @@ export default function FounderStatus({
       </div>
 
       {founders.length < 4 && (
-        <p className="text-sm text-gray-500 mt-4">
+        <p className="text-xs text-stripe-gray-500 mt-3">
           Up to {4 - founders.length} more founder
           {4 - founders.length !== 1 ? "s" : ""} can join
         </p>

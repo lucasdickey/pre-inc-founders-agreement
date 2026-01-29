@@ -163,14 +163,14 @@ export default function Chat({
   ];
 
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div className="flex h-[calc(100vh-140px)] bg-white rounded-lg shadow-stripe border border-stripe-border overflow-hidden">
       {/* Progress sidebar */}
-      <div className="w-64 border-r bg-gray-50 p-4 hidden md:block">
-        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
-          Progress
+      <div className="w-56 border-r border-stripe-border bg-stripe-gray-50 p-4 hidden md:block">
+        <h3 className="text-[11px] font-semibold text-stripe-gray-500 uppercase tracking-wider mb-3">
+          Interview Progress
         </h3>
-        <div className="space-y-1">
-          {allTopics.map((t) => {
+        <div className="space-y-0.5">
+          {allTopics.map((t, index) => {
             const isCompleted = completedTopics.includes(t);
             const isCurrent = t === topic;
 
@@ -183,7 +183,7 @@ export default function Chat({
               >
                 {isCompleted ? (
                   <svg
-                    className="w-4 h-4"
+                    className="w-4 h-4 flex-shrink-0"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -195,12 +195,18 @@ export default function Chat({
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
-                ) : isCurrent ? (
-                  <div className="w-2 h-2 bg-stripe-purple rounded-full" />
                 ) : (
-                  <div className="w-2 h-2 bg-gray-300 rounded-full" />
+                  <span
+                    className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-semibold ${
+                      isCurrent
+                        ? "bg-stripe-purple text-white"
+                        : "bg-stripe-gray-200 text-white"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
                 )}
-                <span>{TOPIC_LABELS[t]}</span>
+                <span className="text-[13px]">{TOPIC_LABELS[t]}</span>
               </div>
             );
           })}
@@ -210,21 +216,22 @@ export default function Chat({
       {/* Chat area */}
       <div className="flex-1 flex flex-col">
         {/* Mobile topic indicator */}
-        <div className="md:hidden px-4 py-2 border-b bg-gray-50">
-          <span className="text-sm text-gray-600">
-            Current: <strong>{TOPIC_LABELS[topic]}</strong>
+        <div className="md:hidden px-4 py-2.5 border-b border-stripe-border bg-stripe-gray-50">
+          <span className="text-xs text-stripe-gray-500">
+            Current topic:{" "}
+            <strong className="text-stripe-slate">{TOPIC_LABELS[topic]}</strong>
           </span>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-stripe-gray-50">
           {messages.map((msg, i) => (
             <div
               key={i}
               className={`chat-message ${msg.role === "user" ? "user" : "assistant"}`}
             >
               {msg.role === "assistant" ? (
-                <div className="prose prose-sm max-w-none">
+                <div className="prose prose-sm max-w-none prose-p:text-stripe-slate prose-p:leading-relaxed">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               ) : (
@@ -247,7 +254,7 @@ export default function Chat({
         </div>
 
         {/* Input */}
-        <div className="chat-input-container">
+        <div className="border-t border-stripe-border p-4 bg-white">
           <div className="flex gap-2">
             <textarea
               ref={inputRef}
@@ -255,17 +262,17 @@ export default function Chat({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your response..."
-              className="flex-1 resize-none rounded-xl border border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-stripe-purple focus:border-transparent"
+              className="flex-1 resize-none rounded-md border border-stripe-border px-3.5 py-2.5 text-sm focus:outline-none focus:border-stripe-purple focus:shadow-stripe-focus transition-shadow"
               rows={2}
               disabled={isLoading}
             />
             <button
               onClick={sendMessage}
               disabled={isLoading || !input.trim()}
-              className="px-6 py-2 bg-stripe-purple text-white rounded-xl hover:bg-stripe-purple-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2 bg-stripe-purple text-white rounded-md hover:bg-stripe-purple-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors self-end"
             >
               <svg
-                className="w-5 h-5"
+                className="w-4 h-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

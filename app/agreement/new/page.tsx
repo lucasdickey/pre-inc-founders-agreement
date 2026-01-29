@@ -49,23 +49,45 @@ export default function NewAgreement() {
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-16">
+    <div className="max-w-md mx-auto px-6 py-12">
+      <div className="mb-6">
+        <a
+          href="/"
+          className="inline-flex items-center gap-1.5 text-sm text-stripe-gray-500 hover:text-stripe-slate transition-colors"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+          Back
+        </a>
+      </div>
+
       <div className="card">
-        <h1 className="text-2xl font-bold text-stripe-slate mb-2">
-          Start Your Agreement
+        <h1 className="text-xl font-semibold text-stripe-slate mb-1">
+          Start your agreement
         </h1>
-        <p className="text-gray-600 mb-6">
+        <p className="text-sm text-stripe-gray-500 mb-6">
           Enter your details to begin. You&apos;ll be able to invite co-founders
           afterward.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label
               htmlFor="founderName"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-stripe-gray-700 mb-1.5"
             >
-              Your Name *
+              Your name
             </label>
             <input
               id="founderName"
@@ -73,7 +95,7 @@ export default function NewAgreement() {
               value={founderName}
               onChange={(e) => setFounderName(e.target.value)}
               required
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-stripe-purple"
+              className="input-stripe"
               placeholder="Jane Smith"
             />
           </div>
@@ -81,9 +103,9 @@ export default function NewAgreement() {
           <div>
             <label
               htmlFor="founderEmail"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-stripe-gray-700 mb-1.5"
             >
-              Your Email *
+              Your email
             </label>
             <input
               id="founderEmail"
@@ -91,7 +113,7 @@ export default function NewAgreement() {
               value={founderEmail}
               onChange={(e) => setFounderEmail(e.target.value)}
               required
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-stripe-purple"
+              className="input-stripe"
               placeholder="founder@example.com"
             />
           </div>
@@ -99,22 +121,25 @@ export default function NewAgreement() {
           <div>
             <label
               htmlFor="companyName"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-stripe-gray-700 mb-1.5"
             >
-              Company Name (working title is fine)
+              Company name
+              <span className="text-stripe-gray-500 font-normal ml-1">
+                (working title is fine)
+              </span>
             </label>
             <input
               id="companyName"
               type="text"
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-stripe-purple"
+              className="input-stripe"
               placeholder="Acme Inc"
             />
           </div>
 
           {error && (
-            <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg">
+            <div className="text-sm text-red-600 bg-red-50 border border-red-100 p-3 rounded-md">
               {error}
             </div>
           )}
@@ -124,7 +149,7 @@ export default function NewAgreement() {
             disabled={isLoading || !founderName || !founderEmail}
             className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? "Creating..." : "Start Interview"}
+            {isLoading ? "Creating..." : "Start interview"}
           </button>
         </form>
       </div>

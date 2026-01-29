@@ -14,13 +14,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gradient-to-b from-white to-gray-50">
-        <nav className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-            <a href="/" className="flex items-center gap-2">
+      <body className="min-h-screen bg-stripe-gray-50">
+        <nav className="border-b border-stripe-border bg-white sticky top-0 z-50">
+          <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+            <a href="/" className="flex items-center gap-3">
               <svg
                 viewBox="0 0 60 25"
-                className="h-6 w-auto"
+                className="h-5 w-auto"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
@@ -31,9 +31,11 @@ export default function RootLayout({
                   fill="#635bff"
                 />
               </svg>
-              <span className="text-stripe-slate font-semibold">Atlas</span>
-              <span className="text-xs bg-stripe-purple/10 text-stripe-purple px-2 py-0.5 rounded-full">
-                Pre-Inc
+              <span className="text-stripe-slate font-semibold text-[15px]">
+                Atlas
+              </span>
+              <span className="border-l border-stripe-border pl-3 text-stripe-slate-light text-sm font-normal">
+                Founders Agreement
               </span>
             </a>
           </div>

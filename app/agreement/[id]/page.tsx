@@ -57,10 +57,11 @@ export default function AgreementPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4" />
-          <div className="h-[600px] bg-gray-100 rounded-2xl" />
+          <div className="h-5 bg-stripe-border rounded w-1/4 mb-3" />
+          <div className="h-3 bg-stripe-gray-50 rounded w-1/3 mb-6" />
+          <div className="h-[600px] bg-white rounded-lg border border-stripe-border" />
         </div>
       </div>
     );
@@ -68,16 +69,16 @@ export default function AgreementPage() {
 
   if (error || !agreement) {
     return (
-      <div className="max-w-md mx-auto px-4 py-16 text-center">
+      <div className="max-w-md mx-auto px-6 py-16 text-center">
         <div className="card">
-          <h1 className="text-xl font-bold text-red-600 mb-2">
-            Agreement Not Found
+          <h1 className="text-lg font-semibold text-red-600 mb-2">
+            Agreement not found
           </h1>
-          <p className="text-gray-600 mb-4">
+          <p className="text-sm text-stripe-gray-500 mb-5">
             {error || "This agreement doesn't exist or has been removed."}
           </p>
           <a href="/" className="btn-primary inline-block">
-            Go Home
+            Go home
           </a>
         </div>
       </div>
@@ -86,10 +87,12 @@ export default function AgreementPage() {
 
   if (!founderId || !currentFounder) {
     return (
-      <div className="max-w-md mx-auto px-4 py-16 text-center">
+      <div className="max-w-md mx-auto px-6 py-16 text-center">
         <div className="card">
-          <h1 className="text-xl font-bold mb-2">Session Expired</h1>
-          <p className="text-gray-600 mb-4">
+          <h1 className="text-lg font-semibold text-stripe-slate mb-2">
+            Session expired
+          </h1>
+          <p className="text-sm text-stripe-gray-500 mb-5">
             Your session for this agreement has expired. Please rejoin using the
             agreement code.
           </p>
@@ -97,7 +100,7 @@ export default function AgreementPage() {
             href={`/agreement/join/${agreement.code}`}
             className="btn-primary inline-block"
           >
-            Rejoin Agreement
+            Rejoin agreement
           </a>
         </div>
       </div>
@@ -105,30 +108,32 @@ export default function AgreementPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-6 py-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-stripe-slate">
+          <h1 className="text-xl font-semibold text-stripe-slate">
             {agreement.companyName}
           </h1>
-          <p className="text-gray-600">Pre-Incorporation Founders Agreement</p>
+          <p className="text-sm text-stripe-gray-500">
+            Pre-Incorporation Founders Agreement
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="bg-gray-100 rounded-lg px-4 py-2 flex items-center gap-2">
-            <span className="text-sm text-gray-600">Join Code:</span>
-            <span className="font-mono font-bold text-stripe-purple">
+        <div className="flex items-center gap-2">
+          <div className="bg-white border border-stripe-border rounded-md px-3 py-1.5 flex items-center gap-2">
+            <span className="text-xs text-stripe-gray-500">Join code:</span>
+            <span className="font-mono text-sm font-semibold text-stripe-purple">
               {agreement.code}
             </span>
             <button
               onClick={copyJoinCode}
-              className="text-gray-500 hover:text-stripe-purple"
+              className="text-stripe-gray-500 hover:text-stripe-purple transition-colors ml-1"
               title="Copy code"
             >
               {copied ? (
                 <svg
-                  className="w-4 h-4 text-green-500"
+                  className="w-3.5 h-3.5 text-stripe-green"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -142,7 +147,7 @@ export default function AgreementPage() {
                 </svg>
               ) : (
                 <svg
-                  className="w-4 h-4"
+                  className="w-3.5 h-3.5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -163,22 +168,22 @@ export default function AgreementPage() {
               onClick={() => setShowExport(!showExport)}
               className="btn-primary"
             >
-              {showExport ? "Back to Chat" : "View Export"}
+              {showExport ? "Back to chat" : "View export"}
             </button>
           )}
         </div>
       </div>
 
-      <div className="grid md:grid-cols-[1fr_300px] gap-6">
+      <div className="grid md:grid-cols-[1fr_280px] gap-5">
         {/* Main content */}
         <div>
           {showExport && allComplete ? (
             <ExportPreview agreementId={agreementId} />
           ) : currentFounder.interviewCompleted ? (
             <div className="card text-center py-12">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-12 h-12 bg-stripe-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg
-                  className="w-8 h-8 text-green-600"
+                  className="w-6 h-6 text-stripe-green"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -191,10 +196,10 @@ export default function AgreementPage() {
                   />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold mb-2">
-                Your Interview is Complete!
+              <h2 className="text-lg font-semibold text-stripe-slate mb-2">
+                Your interview is complete
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-sm text-stripe-gray-500 mb-6">
                 {allComplete
                   ? "All founders have completed their interviews. You can now export your agreement."
                   : "Waiting for other founders to complete their interviews."}
@@ -204,7 +209,7 @@ export default function AgreementPage() {
                   onClick={() => setShowExport(true)}
                   className="btn-primary"
                 >
-                  View & Export Agreement
+                  View &amp; export agreement
                 </button>
               )}
             </div>
@@ -222,30 +227,29 @@ export default function AgreementPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-5">
           <FounderStatus
             founders={agreement.founders}
             currentFounderId={founderId}
           />
 
           {agreement.founders.length < 4 && (
-            <div className="card bg-stripe-purple/5 border-stripe-purple/20">
-              <h3 className="font-semibold mb-2">Invite Co-Founders</h3>
-              <p className="text-sm text-gray-600 mb-3">
+            <div className="card">
+              <h3 className="text-sm font-semibold text-stripe-slate mb-2">
+                Invite co-founders
+              </h3>
+              <p className="text-xs text-stripe-gray-500 mb-3">
                 Share this code with your co-founders so they can join and
                 complete their own interview.
               </p>
-              <div className="bg-white rounded-lg p-3 text-center">
-                <span className="font-mono text-2xl font-bold text-stripe-purple">
+              <div className="bg-stripe-gray-50 border border-stripe-border rounded-md p-3 text-center">
+                <span className="font-mono text-xl font-bold text-stripe-purple">
                   {agreement.code}
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                Or share:{" "}
-                <span className="font-mono">
-                  {typeof window !== "undefined" ? window.location.origin : ""}
-                  /agreement/join/{agreement.code}
-                </span>
+              <p className="text-[11px] text-stripe-gray-500 mt-2 text-center font-mono break-all">
+                {typeof window !== "undefined" ? window.location.origin : ""}
+                /agreement/join/{agreement.code}
               </p>
             </div>
           )}
