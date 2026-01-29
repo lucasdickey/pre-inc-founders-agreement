@@ -1,0 +1,17 @@
+{
+  "name": "founders-agreement-cli",
+  "version": "1.0.0",
+  "description": "Terminal-based Pre-Incorporation Founders Agreement tool",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "founders-agreement": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "inquirer": "^9.2.12"
+  }
+}
