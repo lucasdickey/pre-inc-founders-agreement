@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     // If this is the start of a new interview
     if (isStart) {
-      const startingResponse = getStartingMessage(founder.name);
+      const startingResponse = getStartingMessage(founder.name, agreement.companyName);
 
       // Create the initial assistant message
       const assistantMessage: ChatMessage = {

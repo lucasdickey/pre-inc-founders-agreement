@@ -8,7 +8,6 @@ import {
 } from "@/lib/supabase";
 import type { Agreement, Founder } from "@/types/agreement";
 import { nanoid } from "nanoid";
-import { createStubFounder } from "@/lib/stubData";
 
 // Generate a human-friendly join code
 function generateJoinCode(): string {
@@ -52,14 +51,10 @@ export async function POST(request: Request) {
       joinedAt: new Date().toISOString(),
     };
 
-    // For prototype demo: automatically add a stub co-founder with completed interview
-    // This allows demonstrating the full flow without needing a second person
-    const stubFounder = createStubFounder();
-
     const agreement = await createAgreement({
       code: generateJoinCode(),
       companyName: companyName || "Untitled Company",
-      founders: [founder, stubFounder],
+      founders: [founder],
       decisionMaking: null,
       exitScenarios: null,
       customFields: [],

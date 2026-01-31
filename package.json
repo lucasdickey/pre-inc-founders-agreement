@@ -2,11 +2,16 @@
   "name": "pre-inc-founders-agreement",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "founders-agreement": "./cli/bin.js"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "cli": "node --experimental-strip-types cli/index.tsx",
+    "cli:build": "npx tsc -p cli/tsconfig.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -15,7 +20,13 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^9.0.1",
-    "nanoid": "^5.0.9"
+    "nanoid": "^5.0.9",
+    "ink": "^5.0.1",
+    "ink-text-input": "^6.0.0",
+    "ink-spinner": "^5.0.0",
+    "ink-select-input": "^6.0.0",
+    "chalk": "^5.3.0",
+    "meow": "^13.2.0"
   },
   "devDependencies": {
     "@types/node": "^20",

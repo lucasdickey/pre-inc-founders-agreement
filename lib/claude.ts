@@ -105,8 +105,8 @@ function parseInterviewResponse(text: string): InterviewResponse {
   };
 }
 
-export function getStartingMessage(founderName: string): InterviewResponse {
-  const parsed = JSON.parse(getInitialMessage(founderName));
+export function getStartingMessage(founderName: string, companyName?: string): InterviewResponse {
+  const parsed = JSON.parse(getInitialMessage(founderName, companyName));
   return parsed;
 }
 
