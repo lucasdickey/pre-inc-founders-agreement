@@ -2,550 +2,162 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================
-   Design System - CSS Variables
-   Based on Stripe's visual language with
-   enhanced contrast and accessibility
-   ============================================ */
-
 :root {
-  /* Color palette */
-  --color-slate-950: #0a2540;
-  --color-slate-900: #1a3a5c;
-  --color-slate-800: #2d4a6a;
-  --color-slate-700: #425d78;
-  --color-slate-600: #5a7186;
-  --color-slate-500: #738694;
-  --color-slate-400: #8d9ba3;
-  --color-slate-300: #a8b3b9;
-  --color-slate-200: #c5cdd0;
-  --color-slate-100: #e3e8ea;
-  --color-slate-50: #f6f8f9;
-
-  /* Brand colors */
-  --color-primary: #635bff;
-  --color-primary-hover: #5851ea;
-  --color-primary-light: #7a73ff;
-  --color-primary-muted: rgba(99, 91, 255, 0.1);
-  --color-primary-subtle: rgba(99, 91, 255, 0.05);
-
-  /* Accent colors */
-  --color-cyan: #00d4ff;
-  --color-green: #00c853;
-  --color-green-muted: rgba(0, 200, 83, 0.1);
-  --color-amber: #f59e0b;
-  --color-amber-muted: rgba(245, 158, 11, 0.1);
-  --color-red: #ef4444;
-  --color-red-muted: rgba(239, 68, 68, 0.1);
-
-  /* Surfaces */
-  --surface-primary: #ffffff;
-  --surface-secondary: #f6f8f9;
-  --surface-elevated: #ffffff;
-
-  /* Text */
-  --text-primary: var(--color-slate-950);
-  --text-secondary: var(--color-slate-600);
-  --text-tertiary: var(--color-slate-400);
-  --text-inverse: #ffffff;
-
-  /* Borders */
-  --border-default: var(--color-slate-200);
-  --border-subtle: var(--color-slate-100);
-  --border-focus: var(--color-primary);
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.04);
-  --shadow-md: 0 4px 12px rgba(10, 37, 64, 0.08);
-  --shadow-lg: 0 8px 24px rgba(10, 37, 64, 0.12);
-  --shadow-xl: 0 16px 48px rgba(10, 37, 64, 0.16);
-
-  /* Animation */
-  --duration-fast: 150ms;
-  --duration-normal: 250ms;
-  --duration-slow: 400ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-
-  /* Focus ring */
-  --focus-ring: 0 0 0 2px var(--surface-primary), 0 0 0 4px var(--color-primary);
-
-  /* Spacing scale */
-  --space-px: 1px;
-  --space-0: 0;
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
+  --foreground: #0a2540;
+  --background: #f6f9fc;
+  --stripe-purple: #635bff;
+  --stripe-purple-dark: #5851ea;
+  --stripe-cyan: #00d4ff;
+  --stripe-border: #e3e8ee;
+  --stripe-gray-50: #f6f9fc;
 }
-
-/* Dark mode colors */
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-  }
-}
-
-/* ============================================
-   Base Styles
-   ============================================ */
 
 body {
-  color: var(--text-primary);
-  background: var(--surface-secondary);
-  /* Sail typography: system font stack */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+  color: var(--foreground);
+  background: var(--background);
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Ubuntu,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
 
-/* Typography utilities */
-.text-balance {
-  text-wrap: balance;
-}
+/* ========================================
+   Stripe Atlas Design System
+   ======================================== */
 
-.text-pretty {
-  text-wrap: pretty;
-}
-
-.tabular-nums {
-  font-variant-numeric: tabular-nums;
-}
-
-/* ============================================
-   Focus Management (Accessibility)
-   ============================================ */
-
-/* Remove default focus, use focus-visible */
-*:focus {
-  outline: none;
-}
-
-*:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-/* Ensure buttons and links have proper focus */
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-[role="button"]:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-/* ============================================
-   Motion & Animation
-   Respects prefers-reduced-motion
-   ============================================ */
-
-@media (prefers-reduced-motion: no-preference) {
-  /* Smooth page transitions */
-  html {
-    scroll-behavior: smooth;
-  }
-
-  /* Staggered fade-in for page content */
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(16px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-fade-in {
-    animation: fadeInUp var(--duration-slow) var(--ease-out) forwards;
-  }
-
-  .animate-fade-in-delay-1 {
-    animation: fadeInUp var(--duration-slow) var(--ease-out) 100ms forwards;
-    opacity: 0;
-  }
-
-  .animate-fade-in-delay-2 {
-    animation: fadeInUp var(--duration-slow) var(--ease-out) 200ms forwards;
-    opacity: 0;
-  }
-
-  .animate-fade-in-delay-3 {
-    animation: fadeInUp var(--duration-slow) var(--ease-out) 300ms forwards;
-    opacity: 0;
-  }
-
-  /* Floating gradient orb animations */
-  @keyframes float {
-    0%, 100% {
-      transform: translate(0, 0) scale(1);
-    }
-    33% {
-      transform: translate(30px, -30px) scale(1.05);
-    }
-    66% {
-      transform: translate(-20px, 20px) scale(0.95);
-    }
-  }
-
-  @keyframes floatDelayed {
-    0%, 100% {
-      transform: translate(0, 0) scale(1);
-    }
-    33% {
-      transform: translate(-40px, 20px) scale(1.02);
-    }
-    66% {
-      transform: translate(30px, -40px) scale(0.98);
-    }
-  }
-
-  @keyframes floatSlow {
-    0%, 100% {
-      transform: translate(0, 0) scale(1);
-    }
-    50% {
-      transform: translate(20px, -20px) scale(1.03);
-    }
-  }
-
-  .animate-float {
-    animation: float 20s ease-in-out infinite;
-  }
-
-  .animate-float-delayed {
-    animation: floatDelayed 25s ease-in-out infinite;
-  }
-
-  .animate-float-slow {
-    animation: floatSlow 30s ease-in-out infinite;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ============================================
-   Chat Component Styles
-   ============================================ */
-
+/* Chat styles */
 .chat-container {
   @apply flex flex-col h-full;
 }
 
 .chat-messages {
-  @apply flex-1 overflow-y-auto p-4 space-y-4;
-  overscroll-behavior: contain;
+  @apply flex-1 overflow-y-auto p-6 space-y-4;
 }
 
 .chat-message {
-  @apply max-w-[85%] px-3 py-2 rounded-xl text-sm;
-  transition: transform var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
+  @apply max-w-[80%] p-4 rounded-lg text-[15px] leading-relaxed;
 }
 
 .chat-message.user {
-  @apply ml-auto rounded-br-sm;
-  background: var(--color-primary);
-  color: var(--text-inverse);
+  @apply bg-stripe-purple text-white ml-auto;
 }
 
 .chat-message.assistant {
-  @apply mr-auto rounded-bl-sm;
-  background: var(--surface-primary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  @apply bg-white border border-stripe-border text-stripe-slate mr-auto;
 }
 
 .chat-input-container {
-  @apply border-t p-4;
-  background: var(--surface-primary);
-  border-color: var(--border-default);
+  @apply border-t border-stripe-border p-4 bg-white;
 }
 
-/* ============================================
-   Progress Tracker
-   ============================================ */
-
+/* Progress tracker */
 .progress-step {
-  @apply flex items-center gap-2 px-2 py-1.5 rounded-md text-xs;
-  transition: background var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors;
 }
 
 .progress-step.completed {
-  background: var(--color-green-muted);
-  color: var(--color-green);
+  @apply text-stripe-green;
 }
 
 .progress-step.current {
-  background: var(--color-primary-muted);
-  color: var(--color-primary);
-  @apply font-medium;
+  @apply bg-stripe-purple/10 text-stripe-purple font-medium;
 }
 
 .progress-step.pending {
-  color: var(--text-tertiary);
+  @apply text-stripe-gray-200;
 }
 
-.progress-step.pending:hover {
-  color: var(--text-secondary);
-}
-
-/* ============================================
-   Export Preview Tabs
-   ============================================ */
-
+/* Export preview tabs */
 .export-tabs {
-  @apply flex gap-1;
-  border-bottom: 1px solid var(--border-default);
+  @apply flex border-b border-stripe-border;
 }
 
 .export-tab {
-  @apply px-4 py-3 text-sm font-medium rounded-t-lg cursor-pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  color: var(--text-secondary);
-  transition: color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
-              background var(--duration-fast) var(--ease-out);
-}
-
-.export-tab:hover {
-  color: var(--text-primary);
-  background: var(--surface-secondary);
+  @apply px-5 py-3 text-sm font-medium border-b-2 border-transparent cursor-pointer transition-colors;
 }
 
 .export-tab.active {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--surface-primary);
+  @apply border-stripe-purple text-stripe-purple;
 }
 
-/* ============================================
-   Document Preview
-   ============================================ */
+.export-tab:not(.active) {
+  @apply text-stripe-gray-500 hover:text-stripe-slate;
+}
 
+/* Code/document preview */
 .document-preview {
-  @apply p-5 rounded-xl text-sm overflow-x-auto;
-  background: var(--color-slate-950);
-  color: var(--color-slate-100);
-  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace;
-  font-feature-settings: "liga" 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.6;
+  @apply bg-stripe-gray-50 border border-stripe-border p-5 rounded-lg font-mono text-sm overflow-x-auto whitespace-pre-wrap text-stripe-slate-light;
 }
 
-/* ============================================
-   Button Styles
-   ============================================ */
-
+/* Button styles — Stripe uses rounded-md, not full pills */
 .btn-primary {
-  @apply px-6 py-3 rounded-full font-medium;
-  background: var(--color-primary);
-  color: var(--text-inverse);
-  transition: background var(--duration-fast) var(--ease-out),
-              transform var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.btn-primary:active {
-  transform: translateY(0);
-  box-shadow: var(--shadow-sm);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+  @apply bg-stripe-purple hover:bg-stripe-purple-dark text-white px-5 py-2.5 rounded-md font-medium text-sm transition-all shadow-stripe-sm hover:shadow-stripe;
 }
 
 .btn-secondary {
-  @apply px-6 py-3 rounded-full font-medium;
-  background: var(--surface-primary);
-  color: var(--color-primary);
-  border: 1px solid var(--color-primary);
-  transition: background var(--duration-fast) var(--ease-out),
-              transform var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
+  @apply bg-white hover:bg-stripe-gray-50 text-stripe-slate border border-stripe-border px-5 py-2.5 rounded-md font-medium text-sm transition-all shadow-stripe-sm hover:shadow-stripe;
 }
 
-.btn-secondary:hover {
-  background: var(--color-primary-subtle);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.btn-secondary:active {
-  transform: translateY(0);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* ============================================
-   Card Styles
-   ============================================ */
-
+/* Card styles — Stripe uses subtle borders, not heavy shadows */
 .card {
-  @apply rounded-2xl p-6;
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-md);
+  @apply bg-white rounded-lg shadow-stripe border border-stripe-border p-6;
 }
 
-.card-hover {
-  transition: transform var(--duration-normal) var(--ease-out),
-              box-shadow var(--duration-normal) var(--ease-out);
+/* Input styles */
+.input-stripe {
+  @apply w-full px-3.5 py-2.5 bg-white border border-stripe-border rounded-md text-sm text-stripe-slate transition-shadow focus:outline-none focus:border-stripe-purple focus:shadow-stripe-focus;
 }
 
-.card-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-}
-
-/* ============================================
-   Form Input Styles
-   ============================================ */
-
-.input {
-  @apply w-full px-4 py-3 rounded-xl;
-  background: var(--surface-primary);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
-  transition: border-color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.input:hover {
-  border-color: var(--color-slate-300);
-}
-
-.input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-muted);
-}
-
-.input:disabled {
-  background: var(--surface-secondary);
-  cursor: not-allowed;
-}
-
-/* ============================================
-   Loading Animation
-   ============================================ */
-
+/* Loading animation */
 .typing-indicator {
-  @apply flex gap-1.5 px-4 py-3;
+  @apply flex gap-1 p-4;
 }
 
 .typing-indicator span {
-  @apply w-2 h-2 rounded-full;
-  background: var(--color-slate-400);
-  animation: typingBounce 1.4s infinite ease-in-out both;
-}
-
-.typing-indicator span:nth-child(1) {
-  animation-delay: -0.32s;
+  @apply w-2 h-2 bg-stripe-gray-200 rounded-full animate-bounce;
 }
 
 .typing-indicator span:nth-child(2) {
-  animation-delay: -0.16s;
+  animation-delay: 0.1s;
 }
 
 .typing-indicator span:nth-child(3) {
-  animation-delay: 0s;
+  animation-delay: 0.2s;
 }
 
-@keyframes typingBounce {
-  0%, 80%, 100% {
-    transform: scale(0.8);
-    opacity: 0.5;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
+/* Stripe Atlas dark hero gradient */
+.atlas-hero {
+  background: linear-gradient(
+    135deg,
+    #0a2540 0%,
+    #1a1f71 50%,
+    #0a2540 100%
+  );
 }
 
-/* ============================================
-   Utility Classes
-   ============================================ */
-
-/* Touch optimization */
-.touch-action-manipulation {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Scrollbar styling */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--color-slate-300);
-  border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--color-slate-400);
-}
-
-/* Gradient text */
-.gradient-text {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-cyan) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Decorative gradient background */
-.gradient-bg {
-  background:
-    radial-gradient(ellipse at top left, var(--color-primary-subtle) 0%, transparent 50%),
-    radial-gradient(ellipse at bottom right, rgba(0, 212, 255, 0.05) 0%, transparent 50%),
-    var(--surface-secondary);
+/* Subtle gradient mesh overlay */
+.atlas-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+      ellipse at 20% 50%,
+      rgba(99, 91, 255, 0.15) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 80% 20%,
+      rgba(0, 212, 255, 0.1) 0%,
+      transparent 50%
+    );
+  pointer-events: none;
 }
