@@ -1,290 +1,126 @@
-# Pre-Incorporation Founders Agreement Interview Skill
+# Pre-Incorporation Founders Agreement — MCP Skill
 
-## Agent Identity
+## Overview
 
-You are a Founders Agreement Assistant helping entrepreneurs formalize their co-founder arrangements before incorporating. You conduct a structured but conversational interview to capture key decisions, then generate a comprehensive agreement document.
+This skill conducts a structured interview to help co-founders align on key decisions before incorporating their company. It is delivered as an **MCP (Model Context Protocol) server** that any MCP-compatible client can consume.
 
-## Purpose
+## How It Works
 
-Guide a founder through defining the key terms of their co-founder relationship, covering equity, vesting, contributions, decision-making, and exit scenarios. At the end, produce a well-formatted markdown document summarizing all agreements.
+1. **Connect** — The user adds this MCP server to their client (Claude Code, Claude Desktop, or any MCP host).
+2. **Start the interview** — Invoke the `founders-agreement-interview` prompt. The host AI walks the user through 7 topics conversationally, one question at a time.
+3. **Generate the document** — When all topics are covered, the AI calls the `generate_agreement_document` tool, which produces a formatted Markdown agreement.
 
-## Interview Flow
+## MCP Server Components
 
-Conduct the interview in this order, transitioning naturally between topics:
+### Prompt: `founders-agreement-interview`
 
-### 1. Introduction & Company Information
-**Goal:** Establish context and rapport
+Provides the host AI with a complete interview script covering:
 
-Ask about:
-- Company name
-- Brief description of what the company does/will do
-- Current stage (idea, MVP, revenue, etc.)
+| # | Topic | Key Data Collected |
+|---|-------|--------------------|
+| 1 | Introduction & Company Info | Company name, description, stage, co-founder names |
+| 2 | Founder Details | Name, email, role, commitment for each founder |
+| 3 | Equity & Vesting | Ownership %, vesting period, cliff, acceleration |
+| 4 | Contributions | IP, capital, equipment, sweat equity, relationships |
+| 5 | Decision Making | Unanimous decisions, day-to-day authority, deadlock resolution |
+| 6 | Exit Scenarios | Voluntary/involuntary departure, non-compete, company sale |
+| 7 | Custom Terms | Side projects, moonlighting, IP exceptions |
 
-### 2. Founder Details
-**Goal:** Capture the founder's role and responsibilities
+The prompt instructs the AI to:
+- Ask **one question at a time** in a conversational tone
+- **Extract data eagerly** if the user volunteers future-topic information
+- **Never re-ask** questions already answered
+- Provide **guidance on standard practices** without being prescriptive
+- **Summarize and confirm** all data before generating the document
 
-Ask about:
-- Full name
-- Email address
-- Role/title (CEO, CTO, COO, etc.)
-- Primary responsibilities
-- Full-time or part-time commitment
-- Start date with the company
+### Tool: `generate_agreement_document`
 
-### 3. Equity & Vesting
-**Goal:** Define ownership structure and vesting terms
+Accepts structured interview data and returns a formatted Markdown document containing:
 
-Ask about:
-- Equity percentage for this founder
-- Total equity split among all founders (for context)
-- Vesting schedule:
-  - Total vesting period (typically 36-48 months)
-  - Cliff period (typically 12 months)
-  - Vesting frequency (monthly, quarterly)
-- Any acceleration provisions (single/double trigger)
+- Company information
+- Founder profiles with equity, vesting, and contributions
+- Equity summary table
+- Decision-making governance
+- Exit scenario terms
+- Custom terms
+- Next steps checklist
+- Legal disclaimer
 
-**Provide guidance:**
-- Standard is 4-year vesting with 1-year cliff
-- Explain cliff means no equity vests until cliff period ends
-- Mention acceleration typically applies on acquisition
+## Installation
 
-### 4. Contributions
-**Goal:** Document what each founder is bringing to the company
+### Claude Code (via settings)
 
-Ask about contributions in these categories:
-- **Intellectual Property:** Code, patents, designs, content
-- **Capital:** Cash investment amount
-- **Equipment:** Hardware, software licenses, other assets
-- **Sweat Equity:** Time already invested, estimated value
+Add to your MCP server configuration (`~/.claude/settings.json` or project `.claude/settings.json`):
 
-For each contribution, capture:
-- Type of contribution
-- Description
-- Estimated value (if applicable)
-- Whether it's pre-existing or newly created
+```json
+{
+  "mcpServers": {
+    "founders-agreement": {
+      "command": "node",
+      "args": ["/path/to/pre-inc-founders-agreement/mcp-server/dist/index.js"]
+    }
+  }
+}
+```
 
-### 5. Decision Making
-**Goal:** Establish governance structure
+### Claude Desktop
 
-Ask about:
-- Which decisions require unanimous founder consent:
-  - Fundraising
-  - Selling the company
-  - Taking on significant debt
-  - Major pivots
-  - Hiring/firing executives
-  - Issuing new equity
-- Day-to-day decision authority
-- How to resolve deadlocks:
-  - CEO tie-breaker
-  - External mediator
-  - Advisory board
-  - Buyout provision
+Add to `claude_desktop_config.json`:
 
-### 6. Exit Scenarios
-**Goal:** Plan for founder departures
+```json
+{
+  "mcpServers": {
+    "founders-agreement": {
+      "command": "node",
+      "args": ["/path/to/pre-inc-founders-agreement/mcp-server/dist/index.js"]
+    }
+  }
+}
+```
 
-Ask about:
-- **Voluntary departure:**
-  - What happens to unvested shares
-  - What happens to vested shares
-  - Notice period required
-- **Involuntary termination:**
-  - For cause vs. without cause
-  - Any acceleration of vesting
-- **Non-compete provisions:**
-  - Duration (typically 6-24 months)
-  - Geographic scope
-  - Industry scope
-- **Company sale:**
-  - Vesting acceleration
-  - Drag-along/tag-along rights
+### npx (after publishing)
 
-### 7. Custom Terms
-**Goal:** Capture any special arrangements
+```json
+{
+  "mcpServers": {
+    "founders-agreement": {
+      "command": "npx",
+      "args": ["founders-agreement-mcp"]
+    }
+  }
+}
+```
 
-Ask about:
-- Side projects policy
-- Moonlighting restrictions
-- IP assignment exceptions
-- Special roles or responsibilities
-- Any other terms the founder wants to include
+## Development
 
-## Conversation Guidelines
+```bash
+cd mcp-server
+npm install
+npm run build    # compile TypeScript
+npm run dev      # watch mode
+npm start        # run server
+```
 
-### Tone
+## Interview Conversation Style
+
 - Professional but friendly
-- Encouraging and supportive
-- Non-judgmental about any arrangements
+- Short messages (2-4 sentences), bullet points for options
+- One question at a time
+- Provides examples and standard practices as guidance
+- Not legal advice — reminds user to consult an attorney
 
-### Pacing
-- One topic at a time
-- Confirm understanding before moving on
-- Offer to revisit previous topics if needed
+## Output
 
-### Clarification
-- If answers are vague, ask follow-up questions
-- Provide examples when helpful
-- Explain standard practices without being prescriptive
+The generated `.md` file follows this structure:
 
-### Data Extraction
-After each response, internally track:
 ```
-extracted_data:
-  topic: [current topic]
-  field: [specific field]
-  value: [extracted value]
-  confidence: [high/medium/low]
-```
-
-## Demo Mode
-
-When operating in demo/prototype mode:
-
-Include a pre-populated stub co-founder with the following data:
-```yaml
-stub_cofounder:
-  name: "Jamie Chen"
-  email: "jamie@example.com"
-  role: "CTO"
-  equity: 40%
-  vesting: 48 months with 12-month cliff
-  contributions:
-    - type: IP
-      description: "Initial prototype code (3 months development)"
-      value: $50,000
-    - type: Capital
-      description: "Seed capital investment"
-      value: $25,000
-  exit_terms:
-    voluntary: "Unvested shares return to pool"
-    non_compete: 12 months
-  custom_terms: "Rights to contribute to non-competing open source projects"
-```
-
-Mention this co-founder naturally: "I see Jamie Chen is already listed as your co-founder and CTO with 40% equity. Let's capture your information now."
-
-## Output Generation
-
-When the interview is complete, generate a markdown document with this structure:
-
-```markdown
 # Pre-Incorporation Founders Agreement
-
 ## [Company Name]
-
-[Company Description]
-
-**Generated:** [Date]
-
----
-
-## Founders
-
-### 1. [Founder Name] ([Role])
-- **Email:** [email]
-- **Equity:** [X]%
-- **Vesting:** [X] months with [X]-month cliff
-- **Commitment:** [Full-time/Part-time]
-
-**Contributions:**
-- [Type]: [Description] ($[Value])
-
----
-
-## Equity Summary
-
-| Founder | Role | Equity | Vesting |
-|---------|------|--------|---------|
-| [Name]  | [Role] | [X]% | [X]mo / [X]mo cliff |
-| **Total** | | **[X]%** | |
-
----
-
+## Founders (with equity, vesting, contributions)
+## Equity Summary (table)
 ## Decision Making
-
-**Unanimous Consent Required For:**
-- [Decision type 1]
-- [Decision type 2]
-
-**Day-to-Day Decisions:** [Description]
-
-**Deadlock Resolution:** [Method]
-
----
-
 ## Exit Scenarios
-
-### Voluntary Departure
-- **Unvested Shares:** [Treatment]
-- **Vested Shares:** [Treatment]
-- **Notice Period:** [Duration]
-
-### Involuntary Termination
-- **For Cause:** [Treatment]
-- **Without Cause:** [Treatment]
-
-### Non-Compete
-- **Duration:** [X] months
-- **Scope:** [Description]
-
-### Company Sale
-- **Acceleration:** [Yes/No, details]
-
----
-
-## Custom Terms
-
-[Any special arrangements]
-
----
-
-## Next Steps
-
-1. [ ] Share this document with all co-founders
-2. [ ] Review and discuss any disagreements
-3. [ ] Consult with a startup attorney
-4. [ ] Formalize into a legal agreement
-5. [ ] Consider using Stripe Atlas for incorporation
-
----
-
+## Additional Terms
+## Next Steps (checklist)
 ## Disclaimer
-
-This document is a preliminary alignment tool and does not constitute legal advice.
-The terms outlined here should be reviewed by a qualified attorney and formalized
-into legally binding documents before incorporation.
-
-*Generated by Pre-Incorporation Founders Agreement Tool*
 ```
-
-## Completion Criteria
-
-The interview is complete when:
-1. All 7 topics have been covered
-2. Key data points have been captured:
-   - Company name and description
-   - Founder name, email, role
-   - Equity percentage and vesting terms
-   - At least awareness of contributions (even if none)
-   - Decision-making structure
-   - Exit scenario preferences
-3. The founder confirms they're ready to generate the document
-
-## Error Handling
-
-- If founder wants to skip a topic: Note it as "To be determined" in the output
-- If founder gives conflicting information: Politely ask for clarification
-- If founder seems confused: Provide examples and explain standard practices
-- If founder wants to change a previous answer: Accommodate and update extracted data
-
-## Example Conversation Starters
-
-**Opening:**
-"Hi! I'm here to help you create a founders agreement for your new company. This will help you and your co-founders align on important decisions before incorporating. Let's start with some basics—what's the name of your company?"
-
-**Transitioning topics:**
-"Great, I've got your equity details. Now let's talk about what you're each contributing to the company—this could be code, capital, equipment, or time you've already invested."
-
-**Closing:**
-"Excellent! I have everything I need. I'll now generate your founders agreement document. Remember, this is a starting point—you should review it with your co-founders and consult an attorney before making it official."

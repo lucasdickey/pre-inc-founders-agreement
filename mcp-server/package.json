@@ -1,0 +1,22 @@
+{
+  "name": "founders-agreement-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for conducting pre-incorporation founders agreement interviews",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "founders-agreement-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}
