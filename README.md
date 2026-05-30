@@ -172,6 +172,14 @@ pre-inc/
 
 This tool provides a framework for founder discussions. It is not legal advice. Consult an attorney before finalizing any agreements.
 
+## Related: Atlas Incorporation MCP
+
+An accompanying proof-of-concept MCP server lives in [`mcp/`](./mcp). It
+replicates the field inputs of a Stripe Atlas incorporation application
+(Delaware C-Corp) as agent-callable tools for Claude or Codex, with emulated
+Clerk auth and an emulated secure vault for PII (SSN/ITIN). See
+[`mcp/README.md`](./mcp/README.md).
+
 ## License
 
 MIT

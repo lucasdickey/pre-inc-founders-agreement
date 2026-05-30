@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "atlas-incorporation": {
+      "command": "node",
+      "args": ["--experimental-strip-types", "mcp/server.ts"],
+      "env": {
+        "ATLAS_DATA_DIR": "mcp/.data"
+      }
+    }
+  }
+}

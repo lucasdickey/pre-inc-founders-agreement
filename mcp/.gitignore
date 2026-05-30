@@ -1,0 +1,6 @@
+# Local emulated database / vault store (never commit applicant data)
+.data/
+node_modules/
+*.tsbuildinfo
+.env
+.env.local
