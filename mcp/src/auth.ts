@@ -12,6 +12,7 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
+import { AppError } from "./errors.ts";
 import {
   createSession,
   getSession,
@@ -55,24 +56,29 @@ export function authenticate(email: string, password?: string): AuthResult {
   };
 }
 
-export class AuthError extends Error {}
-
 /**
- * Resolve a session token to an actor. Throws AuthError if missing/expired —
- * every data tool calls this first so records are always scoped to an owner.
+ * Resolve a session token to an actor. Throws AppError(AUTH_ERROR) if
+ * missing/expired — every data tool calls this first so records are always
+ * scoped to an owner.
  */
 export function verifySessionToken(token: string | undefined): AuthenticatedActor {
   if (!token) {
-    throw new AuthError(
-      "Not authenticated. Call `authenticate` with your email to get a sessionToken, then pass it on every call."
+    throw new AppError(
+      "AUTH_ERROR",
+      "Not authenticated. Call `atlas_authenticate` with your email to get a session_token, then pass it on every call.",
+      { field: "session_token" }
     );
   }
   const session = getSession(token);
   if (!session) {
-    throw new AuthError("Invalid sessionToken. Re-run `authenticate` to get a fresh one.");
+    throw new AppError("AUTH_ERROR", "Invalid session_token. Re-run `atlas_authenticate` to get a fresh one.", {
+      field: "session_token",
+    });
   }
   if (Date.now() > Date.parse(session.expiresAt)) {
-    throw new AuthError("Session expired. Re-run `authenticate` to get a fresh sessionToken.");
+    throw new AppError("AUTH_ERROR", "Session expired. Re-run `atlas_authenticate` to get a fresh session_token.", {
+      field: "session_token",
+    });
   }
   return { userId: session.userId, email: "" };
 }

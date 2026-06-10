@@ -8,8 +8,10 @@
  *   - IRS Form SS-4 (EIN application)
  *
  * Atlas only forms Delaware C-Corps, so `stateOfIncorporation` and `entityType`
- * are fixed. Everything else is collected here. Sensitive identifiers (SSN/ITIN)
- * are stored sealed by the vault and never held as plaintext at rest.
+ * are fixed. Equity is modeled as ownership PERCENTAGES (founders + an option
+ * pool) that sum to 100, over a `totalShares` cap — matching the Atlas data
+ * model. Sensitive identifiers (SSN/ITIN) are stored sealed by the vault and
+ * never held as plaintext at rest.
  */
 
 import { randomUUID } from "node:crypto";
@@ -63,28 +65,29 @@ export interface CompanyDetails {
   website?: string;
 }
 
-export interface ShareStructure {
-  /** Total shares the corporation is authorized to issue. Atlas default: 10M. */
-  authorizedShares: number;
+/**
+ * Capitalization. Ownership is expressed as percentages (per founder + an
+ * option pool) that must sum to 100, over `totalShares` authorized shares.
+ */
+export interface Capitalization {
+  /** Total authorized shares. Atlas default: 10,000,000. */
+  totalShares: number;
   /** Par value per share. Atlas default: $0.00001. */
   parValuePerShare: number;
-  /** Shares actually issued to founders at formation. */
-  sharesIssuedAtFormation: number | null;
-  /** Price founders pay per share. Atlas default: $0.0001. */
-  pricePerShare: number;
-}
-
-export interface RegisteredAgent {
-  /** Delaware requires a registered agent with a physical DE address. */
-  name: string;
-  office: Address;
+  /** Percentage reserved for the option/equity pool (0–50). */
+  equityPoolPercent: number;
+  /** Map of founder id -> ownership percent. Founders + pool must sum to 100. */
+  allocations: Record<string, number>;
 }
 
 export interface VestingTerms {
-  totalMonths: number;
+  durationMonths: number;
   cliffMonths: number;
-  accelerationOnExit: boolean;
+  /** "date_of_incorporation" or an ISO YYYY-MM-DD date. */
+  startDate: string;
 }
+
+export type FounderRole = "primary" | "co_founder";
 
 export interface FounderStockholder {
   id: string;
@@ -92,11 +95,12 @@ export interface FounderStockholder {
   email: string;
   /** Title/role, e.g. "CEO", "CTO". */
   title: string;
+  /** The primary founder is the account representative (SSN collected). */
+  role: FounderRole;
   mailingAddress: Address | null;
   citizenshipCountry: string;
-  /** Shares allocated to this founder at formation. */
-  shares: number;
   considerationType: "cash" | "ip_assignment" | "services" | "mixed";
+  /** Set via atlas_set_equity_terms. */
   vesting: VestingTerms | null;
   /** SSN or ITIN — sealed by the vault. Null if not yet provided. */
   ssnOrItin: SealedValue | null;
@@ -145,7 +149,7 @@ export interface IncorporationApplication {
   ownerUserId: string;
   status: ApplicationStatus;
   company: CompanyDetails;
-  shareStructure: ShareStructure;
+  capitalization: Capitalization;
   registeredAgent: RegisteredAgent;
   principalAddress: Address | null;
   founders: FounderStockholder[];
@@ -157,21 +161,22 @@ export interface IncorporationApplication {
   submittedAt: string | null;
 }
 
+export interface RegisteredAgent {
+  /** Delaware requires a registered agent with a physical DE address. */
+  name: string;
+  office: Address;
+}
+
 // --- Atlas defaults --------------------------------------------------------
 
 export const ATLAS_DEFAULTS = {
   stateOfIncorporation: "Delaware" as const,
   entityType: "C-Corporation" as const,
-  authorizedShares: 10_000_000,
+  totalShares: 10_000_000,
   parValuePerShare: 0.00001,
-  pricePerShare: 0.0001,
   businessPurpose:
     "To engage in any lawful act or activity for which corporations may be " +
     "organized under the General Corporation Law of the State of Delaware.",
-  /**
-   * Atlas pairs every company with a Delaware registered agent. Emulated here
-   * with a placeholder DE office address.
-   */
   registeredAgent: {
     name: "Atlas Registered Agent (emulated partner)",
     office: {
@@ -199,11 +204,11 @@ export function createEmptyApplication(ownerUserId: string): IncorporationApplic
       businessDescription: null,
       businessPurpose: ATLAS_DEFAULTS.businessPurpose,
     },
-    shareStructure: {
-      authorizedShares: ATLAS_DEFAULTS.authorizedShares,
+    capitalization: {
+      totalShares: ATLAS_DEFAULTS.totalShares,
       parValuePerShare: ATLAS_DEFAULTS.parValuePerShare,
-      sharesIssuedAtFormation: null,
-      pricePerShare: ATLAS_DEFAULTS.pricePerShare,
+      equityPoolPercent: 0,
+      allocations: {},
     },
     registeredAgent: structuredClone(ATLAS_DEFAULTS.registeredAgent),
     principalAddress: null,
@@ -229,9 +234,17 @@ export function createEmptyApplication(ownerUserId: string): IncorporationApplic
 // --- Validation ------------------------------------------------------------
 
 export interface ValidationIssue {
-  step: string;
+  section: "company" | "founders" | "equity" | "governance" | "address" | "tax" | "attestation";
   field: string;
   message: string;
+}
+
+/** Tolerance for floating-point ownership sums. */
+const OWNERSHIP_TOLERANCE = 0.01;
+
+export function ownershipTotal(cap: Capitalization): number {
+  const founders = Object.values(cap.allocations).reduce((s, v) => s + v, 0);
+  return founders + cap.equityPoolPercent;
 }
 
 /**
@@ -240,8 +253,13 @@ export interface ValidationIssue {
  */
 export function validateApplication(app: IncorporationApplication): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const need = (cond: boolean, step: string, field: string, message: string) => {
-    if (!cond) issues.push({ step, field, message });
+  const need = (
+    cond: boolean,
+    section: ValidationIssue["section"],
+    field: string,
+    message: string
+  ) => {
+    if (!cond) issues.push({ section, field, message });
   };
 
   // Company
@@ -253,25 +271,30 @@ export function validateApplication(app: IncorporationApplication): ValidationIs
     "Business description is required."
   );
 
-  // Shares
-  const issued = app.shareStructure.sharesIssuedAtFormation ?? 0;
-  need(issued > 0, "shares", "sharesIssuedAtFormation", "Shares issued at formation must be > 0.");
-  need(
-    issued <= app.shareStructure.authorizedShares,
-    "shares",
-    "sharesIssuedAtFormation",
-    "Shares issued cannot exceed authorized shares."
-  );
-
   // Founders
   need(app.founders.length > 0, "founders", "founders", "At least one founder/stockholder is required.");
-  const allocated = app.founders.reduce((sum, f) => sum + f.shares, 0);
+  need(
+    app.founders.some((f) => f.role === "primary"),
+    "founders",
+    "primary",
+    "Exactly one primary (representative) founder is required."
+  );
+
+  // Equity
   if (app.founders.length > 0) {
+    const allocated = app.founders.filter((f) => app.capitalization.allocations[f.id] === undefined);
     need(
-      allocated === issued,
-      "founders",
-      "shares",
-      `Founder share allocations (${allocated}) must equal shares issued at formation (${issued}).`
+      allocated.length === 0,
+      "equity",
+      "allocations",
+      `Every founder needs an ownership percentage. Missing: ${allocated.map((f) => f.fullName).join(", ")}.`
+    );
+    const total = ownershipTotal(app.capitalization);
+    need(
+      Math.abs(total - 100) <= OWNERSHIP_TOLERANCE,
+      "equity",
+      "allocations",
+      `Ownership (founders + equity pool) must sum to 100. Current total: ${total}.`
     );
   }
 
@@ -340,21 +363,22 @@ export const FIELD_CATALOG: FieldDoc[] = [
   { group: "Company", field: "stateOfIncorporation", required: true, sensitive: false, notes: "Fixed: Delaware (Atlas)." },
   { group: "Company", field: "entityType", required: true, sensitive: false, notes: "Fixed: C-Corporation (Atlas)." },
   { group: "Company", field: "businessDescription", required: true, sensitive: false, notes: "What the company does." },
-  { group: "Shares", field: "authorizedShares", required: true, sensitive: false, notes: "Default 10,000,000." },
-  { group: "Shares", field: "parValuePerShare", required: true, sensitive: false, notes: "Default $0.00001." },
-  { group: "Shares", field: "sharesIssuedAtFormation", required: true, sensitive: false, notes: "Must equal sum of founder shares." },
-  { group: "Shares", field: "pricePerShare", required: true, sensitive: false, notes: "Founder purchase price. Default $0.0001." },
+  { group: "Equity", field: "totalShares", required: false, sensitive: false, notes: "Authorized shares. Default 10,000,000." },
+  { group: "Equity", field: "parValuePerShare", required: false, sensitive: false, notes: "Default $0.00001." },
+  { group: "Equity", field: "equityPoolPercent", required: false, sensitive: false, notes: "Option pool %, 0–50." },
+  { group: "Equity", field: "allocations", required: true, sensitive: false, notes: "Founder % map; founders + pool must sum to 100." },
+  { group: "Equity", field: "vesting", required: false, sensitive: false, notes: "Per-founder vesting (duration, cliff, start)." },
   { group: "RegisteredAgent", field: "name + office", required: true, sensitive: false, notes: "DE requires an agent with a DE address. Atlas provides one." },
   { group: "Address", field: "principalAddress", required: true, sensitive: false, notes: "Principal business / mailing address." },
   { group: "Founder", field: "fullName/email/title", required: true, sensitive: false, notes: "Per stockholder." },
-  { group: "Founder", field: "shares", required: true, sensitive: false, notes: "Allocation at formation." },
-  { group: "Founder", field: "ssnOrItin", required: false, sensitive: true, notes: "Sealed in the vault; masked on read." },
+  { group: "Founder", field: "role", required: true, sensitive: false, notes: "primary (representative) or co_founder." },
+  { group: "Founder", field: "ssnOrItin", required: false, sensitive: true, notes: "Collected via secure elicitation; sealed; masked on read." },
   { group: "Founder", field: "plans83bElection", required: false, sensitive: false, notes: "83(b) within 30 days of purchase." },
   { group: "Governance", field: "directors", required: true, sensitive: false, notes: "Initial board." },
   { group: "Governance", field: "officers", required: true, sensitive: false, notes: "President / Secretary / Treasurer at minimum." },
   { group: "Governance", field: "incorporatorName", required: true, sensitive: false, notes: "Signs the Certificate. Atlas usually acts here." },
   { group: "Tax", field: "fileForEin", required: true, sensitive: false, notes: "File IRS Form SS-4 for an EIN." },
-  { group: "Tax", field: "responsibleParty.ssnOrItin", required: false, sensitive: true, notes: "Sealed in the vault; required for SS-4 when filing for EIN." },
+  { group: "Tax", field: "responsibleParty.ssnOrItin", required: false, sensitive: true, notes: "Collected via secure elicitation; sealed." },
   { group: "Tax", field: "fiscalYearEndMonth", required: true, sensitive: false, notes: "Default December." },
   { group: "Attestation", field: "agreedToTerms / signatoryName", required: true, sensitive: false, notes: "Required before submit." },
 ];

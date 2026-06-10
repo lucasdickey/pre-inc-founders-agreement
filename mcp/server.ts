@@ -3,15 +3,18 @@
  * Atlas Incorporation MCP server.
  *
  * A proof-of-concept Model Context Protocol server that replicates the field
- * inputs of a Stripe Atlas incorporation application (Delaware C-Corp) as a set
- * of agent-callable tools. Designed to be reached from Claude or Codex.
+ * inputs of a Stripe Atlas incorporation application (Delaware C-Corp) as
+ * agent-callable tools. Designed to be reached from Claude or Codex.
  *
- *   Auth     — emulated Clerk: `authenticate` issues a sessionToken that scopes
- *              every record to its owner (passed on every subsequent call).
- *   Storage  — emulated database (JSON on disk) shaped like Supabase rows.
- *   Security — emulated secure vault: SSN/ITIN are sealed before storage and
- *              only ever returned masked. We emulate the boundary rather than
- *              wiring real KMS encryption.
+ *   Auth      — emulated Clerk: `atlas_authenticate` issues a session_token that
+ *               scopes every record to its owner (passed on every call).
+ *   Storage   — emulated database (JSON on disk) shaped like Supabase rows.
+ *   Security  — emulated secure vault: SSN/ITIN are collected via MCP
+ *               *elicitation* (kept out of the model's context), sealed before
+ *               storage, and only ever returned masked.
+ *   Equity    — ownership percentages + an option pool over a share cap.
+ *   Contract  — every tool ships an outputSchema + structuredContent and a typed
+ *               errorCode; writes lock after submission (FORMATION_LOCKED).
  *
  * Run:  npm start   (inside mcp/)   or via the .mcp.json in the repo root.
  */
@@ -20,8 +23,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { authenticate, AuthError, verifySessionToken } from "./src/auth.ts";
-import { seal } from "./src/vault.ts";
+import { authenticate, verifySessionToken } from "./src/auth.ts";
+import { AppError, toStructuredError } from "./src/errors.ts";
+import { seal, type SealedValue } from "./src/vault.ts";
 import {
   getApplication,
   insertApplication,
@@ -35,6 +39,7 @@ import {
   FIELD_CATALOG,
   fullCompanyName,
   maskDeep,
+  ownershipTotal,
   validateApplication,
   type Address,
   type EntityDesignator,
@@ -45,35 +50,59 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 const server = new McpServer({
   name: "atlas-incorporation-mcp",
-  version: "0.1.0",
+  version: "0.2.0",
 });
 
 // --- result + guard helpers ------------------------------------------------
 
-function ok(text: string, structured?: unknown): CallToolResult {
-  const content: CallToolResult["content"] = [{ type: "text", text }];
-  if (structured !== undefined) {
-    content.push({ type: "text", text: JSON.stringify(structured, null, 2) });
-  }
-  return { content };
+function ok(summary: string, structured: Record<string, unknown>): CallToolResult {
+  return {
+    content: [{ type: "text", text: summary }],
+    structuredContent: structured,
+  };
 }
 
-function fail(message: string): CallToolResult {
-  return { isError: true, content: [{ type: "text", text: message }] };
+function errorResult(e: unknown): CallToolResult {
+  const se = toStructuredError(e);
+  // Note: a tool's outputSchema describes its SUCCESS payload. Clients still
+  // validate any `structuredContent` present on an error, so we carry the typed
+  // error as a JSON content block instead (machine-readable, schema-agnostic).
+  return {
+    isError: true,
+    content: [
+      { type: "text", text: `[${se.errorCode}] ${se.message}` },
+      { type: "text", text: JSON.stringify(se) },
+    ],
+  };
 }
 
-/** Resolve a session token to an owned application, or throw a friendly error. */
+/** Resolve a session token to an owned application, or throw a typed error. */
 function loadOwnedApp(
   sessionToken: string | undefined,
   applicationId: string
 ): IncorporationApplication {
   const actor = verifySessionToken(sessionToken);
   const app = getApplication(applicationId);
-  if (!app) throw new AuthError(`No incorporation application found with id ${applicationId}.`);
+  if (!app) {
+    throw new AppError("FORMATION_NOT_FOUND", `No formation found with id ${applicationId}.`, {
+      field: "application_id",
+    });
+  }
   if (app.ownerUserId !== actor.userId) {
-    throw new AuthError("This application belongs to a different account.");
+    throw new AppError("AUTH_ERROR", "This formation belongs to a different account.");
   }
   return app;
+}
+
+/** Block writes once the formation has been submitted. */
+function assertUnlocked(app: IncorporationApplication): void {
+  if (app.status === "submitted") {
+    throw new AppError(
+      "FORMATION_LOCKED",
+      "This formation has already been submitted; no further edits are allowed.",
+      { details: { submittedAt: app.submittedAt } }
+    );
+  }
 }
 
 /** Bump a draft application into the in_progress state on first edit. */
@@ -82,9 +111,9 @@ function touch(app: IncorporationApplication): void {
 }
 
 const sessionField = {
-  sessionToken: z
+  session_token: z
     .string()
-    .describe("Session token from `authenticate`. Required on every call."),
+    .describe("Session token from `atlas_authenticate`. Required on every call."),
 };
 
 const addressShape = {
@@ -92,7 +121,7 @@ const addressShape = {
   line2: z.string().optional(),
   city: z.string(),
   state: z.string().describe("Two-letter US state code, e.g. CA."),
-  postalCode: z.string(),
+  postal_code: z.string(),
   country: z.string().default("US"),
 };
 
@@ -101,287 +130,496 @@ function toAddress(a: {
   line2?: string;
   city: string;
   state: string;
-  postalCode: string;
+  postal_code: string;
   country: string;
 }): Address {
-  return { ...a };
+  return {
+    line1: a.line1,
+    line2: a.line2,
+    city: a.city,
+    state: a.state,
+    postalCode: a.postal_code,
+    country: a.country,
+  };
+}
+
+// --- secure SSN collection (via elicitation) -------------------------------
+
+/**
+ * Elicit an SSN/ITIN directly from the user through the MCP client. The value
+ * is returned to the server WITHOUT passing through the model's context.
+ * Returns `supported: false` when the client can't do elicitation so callers
+ * can fall back gracefully instead of silently dropping to a plaintext arg.
+ */
+async function elicitSsn(label: string): Promise<{ supported: boolean; value: string | null }> {
+  const caps = server.server.getClientCapabilities();
+  if (!caps?.elicitation) return { supported: false, value: null };
+
+  const result = await server.server.elicitInput({
+    mode: "form",
+    message:
+      `Securely enter the SSN or ITIN for ${label}. This value is sent straight ` +
+      `to the secure vault and is NOT shared with the AI model.`,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        ssn_or_itin: {
+          type: "string",
+          title: "SSN or ITIN",
+          description: "9 digits, e.g. 123-45-6789",
+          minLength: 9,
+          maxLength: 11,
+        },
+      },
+      required: ["ssn_or_itin"],
+    },
+  });
+
+  if (result.action === "accept") {
+    const v = (result.content as Record<string, unknown> | undefined)?.ssn_or_itin;
+    if (typeof v === "string" && v.trim()) return { supported: true, value: v.trim() };
+  }
+  return { supported: true, value: null };
+}
+
+interface SsnResolution {
+  sealed: SealedValue | null;
+  status: "sealed" | "collected_via_elicitation" | "declined" | "client_unsupported" | "skipped";
+  note: string;
+}
+
+/**
+ * Resolve an SSN from one of two paths:
+ *  - `directValue` (explicit fallback arg) — sealed immediately.
+ *  - `collect: true` — elicited securely from the user, then sealed.
+ */
+async function resolveSsn(
+  label: string,
+  directValue: string | undefined,
+  collect: boolean | undefined
+): Promise<SsnResolution> {
+  if (directValue) {
+    const sealed = seal(directValue, "tax_id");
+    return { sealed, status: "sealed", note: `SSN sealed as ${sealed.masked}.` };
+  }
+  if (collect) {
+    const r = await elicitSsn(label);
+    if (!r.supported) {
+      return {
+        sealed: null,
+        status: "client_unsupported",
+        note:
+          "SSN not collected: this client does not support secure elicitation. " +
+          "Provide it via the web handoff, or pass ssn_or_itin directly.",
+      };
+    }
+    if (r.value) {
+      const sealed = seal(r.value, "tax_id");
+      return {
+        sealed,
+        status: "collected_via_elicitation",
+        note: `SSN collected via secure elicitation and sealed as ${sealed.masked}.`,
+      };
+    }
+    return { sealed: null, status: "declined", note: "SSN entry was declined by the user." };
+  }
+  return { sealed: null, status: "skipped", note: "No SSN provided." };
 }
 
 // --- auth ------------------------------------------------------------------
 
 server.registerTool(
-  "authenticate",
+  "atlas_authenticate",
   {
     title: "Authenticate (emulated Clerk)",
     description:
       "Sign in / sign up with an email to start an authenticated session. " +
-      "Returns a sessionToken that must be passed to every other tool. " +
+      "Returns a session_token that must be passed to every other tool. " +
       "This emulates Clerk — no real credentials are validated.",
     inputSchema: {
       email: z.string().email().describe("Your email — establishes your identity."),
-      password: z
-        .string()
-        .optional()
-        .describe("Optional. Recorded only as a one-way marker in this POC."),
+      password: z.string().optional().describe("Optional. Recorded only as a one-way marker."),
+    },
+    outputSchema: {
+      session_token: z.string(),
+      user_id: z.string(),
+      expires_at: z.string(),
     },
   },
   async ({ email, password }) => {
-    const result = authenticate(email, password);
-    return ok(
-      `Authenticated as ${result.email}.\n` +
-        `Use this sessionToken on every subsequent call (expires ${result.expiresAt}).`,
-      { sessionToken: result.sessionToken, userId: result.userId, expiresAt: result.expiresAt }
-    );
+    try {
+      const r = authenticate(email, password);
+      return ok(
+        `Authenticated as ${r.email}. Use this session_token on every call (expires ${r.expiresAt}).`,
+        { session_token: r.sessionToken, user_id: r.userId, expires_at: r.expiresAt }
+      );
+    } catch (e) {
+      return errorResult(e);
+    }
   }
 );
 
-// --- application lifecycle -------------------------------------------------
+// --- formation lifecycle ---------------------------------------------------
 
 server.registerTool(
-  "create_incorporation",
+  "atlas_formation_create",
   {
-    title: "Start a new incorporation application",
+    title: "Start a new formation",
     description:
-      "Create a new Stripe Atlas Delaware C-Corp incorporation application, " +
-      "pre-filled with Atlas defaults (10M authorized shares, $0.00001 par " +
-      "value, DE registered agent). Returns the applicationId to use on the " +
-      "remaining tools.",
+      "Create a new Stripe Atlas Delaware C-Corp formation, pre-filled with " +
+      "Atlas defaults (10M authorized shares, $0.00001 par value, DE registered " +
+      "agent). Returns the application_id used on the remaining tools.",
     inputSchema: { ...sessionField },
+    outputSchema: { application_id: z.string(), status: z.string() },
+    annotations: { idempotentHint: false },
   },
-  async ({ sessionToken }) => {
+  async ({ session_token }) => {
     try {
-      const actor = verifySessionToken(sessionToken);
+      const actor = verifySessionToken(session_token);
       const app = createEmptyApplication(actor.userId);
       insertApplication(app);
       return ok(
-        `Created incorporation application ${app.id}.\n` +
-          `State: ${app.company.stateOfIncorporation} • Entity: ${app.company.entityType}.\n` +
-          `Next: set_company_details, set_share_structure, add_founder, set_governance, ` +
-          `set_principal_address, set_tax_responsible_party, then validate_incorporation.`,
-        { applicationId: app.id, status: app.status }
+        `Created formation ${app.id} (${app.company.stateOfIncorporation} ${app.company.entityType}). ` +
+          `Next: atlas_set_company_details, atlas_add_founder, atlas_set_ownership, ` +
+          `atlas_set_equity_terms, atlas_set_governance, atlas_set_principal_address, ` +
+          `atlas_set_tax_responsible_party, then atlas_formation_status.`,
+        { application_id: app.id, status: app.status }
       );
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
     }
   }
 );
 
 server.registerTool(
-  "list_incorporations",
+  "atlas_list_formations",
   {
-    title: "List my incorporation applications",
-    description: "List all incorporation applications owned by the authenticated account.",
+    title: "List my formations",
+    description: "List all formations owned by the authenticated account.",
     inputSchema: { ...sessionField },
+    outputSchema: { formations: z.array(z.any()) },
+    annotations: { readOnlyHint: true },
   },
-  async ({ sessionToken }) => {
+  async ({ session_token }) => {
     try {
-      const actor = verifySessionToken(sessionToken);
-      const apps = listApplicationsForUser(actor.userId).map((a) => ({
-        applicationId: a.id,
+      const actor = verifySessionToken(session_token);
+      const formations = listApplicationsForUser(actor.userId).map((a) => ({
+        application_id: a.id,
         company: fullCompanyName(a.company),
         status: a.status,
         founders: a.founders.length,
-        updatedAt: a.updatedAt,
+        updated_at: a.updatedAt,
       }));
-      return ok(`You have ${apps.length} application(s).`, apps);
+      return ok(`You have ${formations.length} formation(s).`, { formations });
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
     }
   }
 );
 
 server.registerTool(
-  "get_incorporation",
+  "atlas_get_formation",
   {
-    title: "Get an incorporation application (masked)",
+    title: "Get a formation (masked)",
     description:
-      "Return the full application record. Sensitive fields (SSN/ITIN) are " +
+      "Return the full formation record. Sensitive fields (SSN/ITIN) are " +
       "returned masked — plaintext is never exposed over MCP.",
-    inputSchema: { ...sessionField, applicationId: z.string() },
+    inputSchema: { ...sessionField, application_id: z.string() },
+    outputSchema: { formation: z.any() },
+    annotations: { readOnlyHint: true },
   },
-  async ({ sessionToken, applicationId }) => {
+  async ({ session_token, application_id }) => {
     try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      return ok(
-        `${fullCompanyName(app.company)} — status: ${app.status}.`,
-        maskDeep(app)
-      );
+      const app = loadOwnedApp(session_token, application_id);
+      return ok(`${fullCompanyName(app.company)} — status: ${app.status}.`, {
+        formation: maskDeep(app),
+      });
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
     }
   }
 );
 
-// --- field setters ---------------------------------------------------------
+server.registerTool(
+  "atlas_formation_status",
+  {
+    title: "Check formation readiness",
+    description:
+      "Run Atlas-style completeness checks. Returns blocking_issues by section; " +
+      "an empty list means the formation is ready to submit. Read-only.",
+    inputSchema: { ...sessionField, application_id: z.string() },
+    outputSchema: {
+      ready: z.boolean(),
+      blocking_issues: z.array(z.any()),
+      status: z.string(),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ session_token, application_id }) => {
+    try {
+      const app = loadOwnedApp(session_token, application_id);
+      const issues = validateApplication(app);
+      if (issues.length === 0 && app.status === "in_progress") {
+        app.status = "ready_for_review";
+        updateApplication(app);
+      }
+      const summary =
+        issues.length === 0
+          ? "✓ Formation is complete and ready to submit."
+          : `Found ${issues.length} item(s) to resolve before submitting.`;
+      return ok(summary, { ready: issues.length === 0, blocking_issues: issues, status: app.status });
+    } catch (e) {
+      return errorResult(e);
+    }
+  }
+);
+
+// --- company ---------------------------------------------------------------
 
 server.registerTool(
-  "set_company_details",
+  "atlas_set_company_details",
   {
     title: "Set company details",
     description:
       "Set the company name, entity designator, backup names, and business " +
-      "description. State (Delaware) and entity type (C-Corporation) are fixed " +
-      "by Atlas and cannot be changed.",
+      "description. State (Delaware) and entity type (C-Corporation) are fixed.",
     inputSchema: {
       ...sessionField,
-      applicationId: z.string(),
-      legalName: z.string().describe("Base name without designator, e.g. 'Acme Robotics'."),
+      application_id: z.string(),
+      legal_name: z.string().describe("Base name without designator, e.g. 'Acme Robotics'."),
       designator: z
         .enum(ENTITY_DESIGNATORS as [EntityDesignator, ...EntityDesignator[]])
         .default("Inc."),
-      nameOptions: z
-        .array(z.string())
-        .max(2)
-        .optional()
-        .describe("Up to two backup names if the first is taken in Delaware."),
-      businessDescription: z.string().describe("Plain-language description of the business."),
+      name_options: z.array(z.string()).max(2).optional().describe("Up to two backup names."),
+      business_description: z.string().describe("Plain-language description of the business."),
       website: z.string().url().optional(),
     },
+    outputSchema: { success: z.boolean(), legal_name: z.string(), warnings: z.array(z.string()).optional() },
+    annotations: { idempotentHint: true },
   },
-  async ({ sessionToken, applicationId, legalName, designator, nameOptions, businessDescription, website }) => {
+  async ({ session_token, application_id, legal_name, designator, name_options, business_description, website }) => {
     try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      app.company.legalName = legalName;
+      const app = loadOwnedApp(session_token, application_id);
+      assertUnlocked(app);
+      app.company.legalName = legal_name;
       app.company.designator = designator;
-      if (nameOptions) app.company.nameOptions = nameOptions;
-      app.company.businessDescription = businessDescription;
+      if (name_options) app.company.nameOptions = name_options;
+      app.company.businessDescription = business_description;
       if (website) app.company.website = website;
       touch(app);
       updateApplication(app);
-      return ok(`Company set to "${fullCompanyName(app.company)}".`, maskDeep(app.company));
+      return ok(`Company set to "${fullCompanyName(app.company)}".`, {
+        success: true,
+        legal_name: fullCompanyName(app.company),
+      });
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
     }
   }
 );
 
-server.registerTool(
-  "set_share_structure",
-  {
-    title: "Set share structure / capitalization",
-    description:
-      "Configure authorized shares, par value, shares issued at formation, and " +
-      "price per share. Defaults follow the Atlas standard.",
-    inputSchema: {
-      ...sessionField,
-      applicationId: z.string(),
-      authorizedShares: z.number().int().positive().default(ATLAS_DEFAULTS.authorizedShares),
-      parValuePerShare: z.number().positive().default(ATLAS_DEFAULTS.parValuePerShare),
-      sharesIssuedAtFormation: z.number().int().positive(),
-      pricePerShare: z.number().positive().default(ATLAS_DEFAULTS.pricePerShare),
-    },
-  },
-  async ({ sessionToken, applicationId, authorizedShares, parValuePerShare, sharesIssuedAtFormation, pricePerShare }) => {
-    try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      if (sharesIssuedAtFormation > authorizedShares) {
-        return fail(
-          `Shares issued (${sharesIssuedAtFormation}) cannot exceed authorized shares (${authorizedShares}).`
-        );
-      }
-      app.shareStructure = {
-        authorizedShares,
-        parValuePerShare,
-        sharesIssuedAtFormation,
-        pricePerShare,
-      };
-      touch(app);
-      updateApplication(app);
-      return ok("Share structure updated.", app.shareStructure);
-    } catch (e) {
-      return fail(asMessage(e));
-    }
-  }
-);
+// --- founders --------------------------------------------------------------
 
 server.registerTool(
-  "set_principal_address",
-  {
-    title: "Set principal business address",
-    description: "Set the company's principal business / mailing address.",
-    inputSchema: { ...sessionField, applicationId: z.string(), ...addressShape },
-  },
-  async ({ sessionToken, applicationId, line1, line2, city, state, postalCode, country }) => {
-    try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      app.principalAddress = toAddress({ line1, line2, city, state, postalCode, country });
-      touch(app);
-      updateApplication(app);
-      return ok("Principal business address updated.", app.principalAddress);
-    } catch (e) {
-      return fail(asMessage(e));
-    }
-  }
-);
-
-server.registerTool(
-  "add_founder",
+  "atlas_add_founder",
   {
     title: "Add a founder / stockholder",
     description:
-      "Add a founder with their share allocation and (optionally) their SSN/ITIN. " +
-      "The SSN/ITIN is sealed by the secure vault on the way in and is only ever " +
-      "returned masked. Call once per founder.",
+      "Add a founder. Set role='primary' for the representative founder (exactly " +
+      "one required). SSN/ITIN is collected securely via elicitation when " +
+      "collect_ssn=true (kept out of the model context, then sealed in the " +
+      "vault). Ownership percentages are set separately via atlas_set_ownership.",
     inputSchema: {
       ...sessionField,
-      applicationId: z.string(),
-      fullName: z.string(),
+      application_id: z.string(),
+      full_name: z.string(),
       email: z.string().email(),
       title: z.string().describe("e.g. CEO, CTO."),
-      shares: z.number().int().positive().describe("Shares allocated at formation."),
-      citizenshipCountry: z.string().default("US"),
-      considerationType: z
-        .enum(["cash", "ip_assignment", "services", "mixed"])
-        .default("cash"),
-      ssnOrItin: z
+      role: z.enum(["primary", "co_founder"]).default("co_founder"),
+      citizenship_country: z.string().default("US"),
+      consideration_type: z.enum(["cash", "ip_assignment", "services", "mixed"]).default("cash"),
+      plans_83b_election: z.boolean().default(true),
+      mailing_address: z.object(addressShape).optional(),
+      collect_ssn: z
+        .boolean()
+        .default(false)
+        .describe("If true, securely elicit the SSN/ITIN from the user via the client."),
+      ssn_or_itin: z
         .string()
         .optional()
-        .describe("Sensitive. Sealed by the vault; never stored or returned in plaintext."),
-      plans83bElection: z.boolean().default(true),
-      mailingAddress: z.object(addressShape).optional(),
-      vesting: z
-        .object({
-          totalMonths: z.number().int().positive().default(48),
-          cliffMonths: z.number().int().nonnegative().default(12),
-          accelerationOnExit: z.boolean().default(false),
-        })
-        .optional(),
+        .describe("Fallback: pass SSN directly (sealed immediately). Prefer collect_ssn."),
+    },
+    outputSchema: {
+      success: z.boolean(),
+      founder_id: z.string(),
+      ssn_status: z.string(),
     },
   },
   async (args) => {
     try {
-      const app = loadOwnedApp(args.sessionToken, args.applicationId);
+      const app = loadOwnedApp(args.session_token, args.application_id);
+      assertUnlocked(app);
+
+      if (args.role === "primary" && app.founders.some((f) => f.role === "primary")) {
+        throw new AppError("VALIDATION_ERROR", "A primary founder already exists. Only one is allowed.", {
+          field: "role",
+        });
+      }
+
+      const ssn = await resolveSsn(args.full_name, args.ssn_or_itin, args.collect_ssn);
       const founder = {
         id: `founder_${app.founders.length + 1}`,
-        fullName: args.fullName,
+        fullName: args.full_name,
         email: args.email,
         title: args.title,
-        mailingAddress: args.mailingAddress ? toAddress(args.mailingAddress) : null,
-        citizenshipCountry: args.citizenshipCountry,
-        shares: args.shares,
-        considerationType: args.considerationType,
-        vesting: args.vesting ?? null,
-        ssnOrItin: args.ssnOrItin ? seal(args.ssnOrItin, "tax_id") : null,
-        plans83bElection: args.plans83bElection,
+        role: args.role,
+        mailingAddress: args.mailing_address ? toAddress(args.mailing_address) : null,
+        citizenshipCountry: args.citizenship_country,
+        considerationType: args.consideration_type,
+        vesting: null,
+        ssnOrItin: ssn.sealed,
+        plans83bElection: args.plans_83b_election,
       };
       app.founders.push(founder);
       touch(app);
       updateApplication(app);
-      const totalAllocated = app.founders.reduce((s, f) => s + f.shares, 0);
       return ok(
-        `Added founder ${founder.fullName} (${founder.shares} shares). ` +
-          `Total allocated across ${app.founders.length} founder(s): ${totalAllocated}.` +
-          (founder.ssnOrItin ? ` SSN/ITIN sealed as ${founder.ssnOrItin.masked}.` : ""),
-        maskDeep(founder)
+        `Added ${founder.role} founder ${founder.fullName} (id: ${founder.id}). ${ssn.note} ` +
+          `Set their ownership % with atlas_set_ownership.`,
+        { success: true, founder_id: founder.id, ssn_status: ssn.status }
       );
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
+    }
+  }
+);
+
+// --- equity ----------------------------------------------------------------
+
+server.registerTool(
+  "atlas_set_ownership",
+  {
+    title: "Set ownership (percentages + option pool)",
+    description:
+      "Set ownership percentages per founder, plus the option/equity pool and " +
+      "total authorized shares. Founder allocations + equity_pool_percent must " +
+      "sum to 100. Call after all founders are added.",
+    inputSchema: {
+      ...sessionField,
+      application_id: z.string(),
+      allocations: z
+        .record(z.string(), z.number().positive().max(100))
+        .describe("Map of founder_id -> ownership percent. e.g. { 'founder_1': 60, 'founder_2': 30 }"),
+      equity_pool_percent: z.number().min(0).max(50).default(0),
+      total_shares: z.number().int().positive().default(ATLAS_DEFAULTS.totalShares),
+    },
+    outputSchema: {
+      success: z.boolean(),
+      total_shares: z.number(),
+      equity_pool_percent: z.number(),
+      ownership_total: z.number(),
+    },
+  },
+  async ({ session_token, application_id, allocations, equity_pool_percent, total_shares }) => {
+    try {
+      const app = loadOwnedApp(session_token, application_id);
+      assertUnlocked(app);
+
+      const validIds = new Set(app.founders.map((f) => f.id));
+      for (const id of Object.keys(allocations)) {
+        if (!validIds.has(id)) {
+          throw new AppError("INVALID_FOUNDER_ID", `Unknown founder_id '${id}'. Use atlas_get_formation to list founders.`, {
+            field: "allocations",
+            details: { valid_founder_ids: [...validIds] },
+          });
+        }
+      }
+
+      const total = Object.values(allocations).reduce((s, v) => s + v, 0) + equity_pool_percent;
+      if (Math.abs(total - 100) > 0.01) {
+        throw new AppError(
+          "OWNERSHIP_SUM_ERROR",
+          `Ownership (founders + equity pool) must sum to 100. Current total: ${total}.`,
+          { field: "allocations", details: { total } }
+        );
+      }
+
+      app.capitalization.allocations = { ...allocations };
+      app.capitalization.equityPoolPercent = equity_pool_percent;
+      app.capitalization.totalShares = total_shares;
+      touch(app);
+      updateApplication(app);
+      return ok(
+        `Ownership set across ${Object.keys(allocations).length} founder(s); ` +
+          `option pool ${equity_pool_percent}%; ${total_shares.toLocaleString()} authorized shares.`,
+        {
+          success: true,
+          total_shares,
+          equity_pool_percent,
+          ownership_total: ownershipTotal(app.capitalization),
+        }
+      );
+    } catch (e) {
+      return errorResult(e);
     }
   }
 );
 
 server.registerTool(
-  "set_governance",
+  "atlas_set_equity_terms",
+  {
+    title: "Set vesting terms for a founder",
+    description:
+      "Set the vesting schedule for a single founder. Call once per founder. " +
+      "Common: 48-month duration, 12-month cliff, starting at incorporation.",
+    inputSchema: {
+      ...sessionField,
+      application_id: z.string(),
+      founder_id: z.string(),
+      vesting_duration_months: z.number().int().positive().default(48),
+      vesting_cliff_months: z.number().int().nonnegative().default(12),
+      vesting_start_date: z
+        .string()
+        .default("date_of_incorporation")
+        .describe("'date_of_incorporation' or an ISO YYYY-MM-DD date."),
+    },
+    outputSchema: { success: z.boolean(), founder_id: z.string() },
+  },
+  async ({ session_token, application_id, founder_id, vesting_duration_months, vesting_cliff_months, vesting_start_date }) => {
+    try {
+      const app = loadOwnedApp(session_token, application_id);
+      assertUnlocked(app);
+      const founder = app.founders.find((f) => f.id === founder_id);
+      if (!founder) {
+        throw new AppError("INVALID_FOUNDER_ID", `Unknown founder_id '${founder_id}'.`, { field: "founder_id" });
+      }
+      if (vesting_cliff_months > vesting_duration_months) {
+        throw new AppError("VALIDATION_ERROR", "Cliff cannot exceed total vesting duration.", {
+          field: "vesting_cliff_months",
+        });
+      }
+      founder.vesting = {
+        durationMonths: vesting_duration_months,
+        cliffMonths: vesting_cliff_months,
+        startDate: vesting_start_date,
+      };
+      touch(app);
+      updateApplication(app);
+      return ok(
+        `Vesting set for ${founder.fullName}: ${vesting_duration_months}mo / ${vesting_cliff_months}mo cliff, ` +
+          `start ${vesting_start_date}.`,
+        { success: true, founder_id }
+      );
+    } catch (e) {
+      return errorResult(e);
+    }
+  }
+);
+
+// --- governance + address --------------------------------------------------
+
+server.registerTool(
+  "atlas_set_governance",
   {
     title: "Set directors and officers",
     description:
@@ -389,136 +627,145 @@ server.registerTool(
       "Secretary, Treasurer at minimum). Optionally override the incorporator.",
     inputSchema: {
       ...sessionField,
-      applicationId: z.string(),
-      directors: z.array(z.object({ fullName: z.string() })).min(1),
+      application_id: z.string(),
+      directors: z.array(z.object({ full_name: z.string() })).min(1),
       officers: z
-        .array(z.object({ title: z.string(), holderName: z.string() }))
+        .array(z.object({ title: z.string(), holder_name: z.string() }))
         .min(1)
-        .describe("e.g. [{title:'President', holderName:'Jane Doe'}, ...]"),
-      incorporatorName: z.string().optional(),
+        .describe("e.g. [{title:'President', holder_name:'Jane Doe'}, ...]"),
+      incorporator_name: z.string().optional(),
     },
+    outputSchema: { success: z.boolean() },
+    annotations: { idempotentHint: true },
   },
-  async ({ sessionToken, applicationId, directors, officers, incorporatorName }) => {
+  async ({ session_token, application_id, directors, officers, incorporator_name }) => {
     try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      app.governance.directors = directors;
-      app.governance.officers = officers;
-      if (incorporatorName) app.governance.incorporatorName = incorporatorName;
+      const app = loadOwnedApp(session_token, application_id);
+      assertUnlocked(app);
+      app.governance.directors = directors.map((d) => ({ fullName: d.full_name }));
+      app.governance.officers = officers.map((o) => ({ title: o.title, holderName: o.holder_name }));
+      if (incorporator_name) app.governance.incorporatorName = incorporator_name;
       touch(app);
       updateApplication(app);
-      return ok(
-        `Governance set: ${directors.length} director(s), ${officers.length} officer(s).`,
-        app.governance
-      );
+      return ok(`Governance set: ${directors.length} director(s), ${officers.length} officer(s).`, {
+        success: true,
+      });
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
     }
   }
 );
 
 server.registerTool(
-  "set_tax_responsible_party",
+  "atlas_set_principal_address",
+  {
+    title: "Set principal business address",
+    description: "Set the company's principal business / mailing address.",
+    inputSchema: { ...sessionField, application_id: z.string(), ...addressShape },
+    outputSchema: { success: z.boolean() },
+    annotations: { idempotentHint: true },
+  },
+  async ({ session_token, application_id, line1, line2, city, state, postal_code, country }) => {
+    try {
+      const app = loadOwnedApp(session_token, application_id);
+      assertUnlocked(app);
+      app.principalAddress = toAddress({ line1, line2, city, state, postal_code, country });
+      touch(app);
+      updateApplication(app);
+      return ok("Principal business address updated.", { success: true });
+    } catch (e) {
+      return errorResult(e);
+    }
+  }
+);
+
+// --- tax / EIN -------------------------------------------------------------
+
+server.registerTool(
+  "atlas_set_tax_responsible_party",
   {
     title: "Set EIN responsible party (IRS Form SS-4)",
     description:
-      "Configure the EIN filing. The responsible party's SSN/ITIN is sealed by " +
-      "the secure vault and only ever returned masked.",
+      "Configure the EIN filing. The responsible party's SSN/ITIN is collected " +
+      "securely via elicitation when collect_ssn=true, sealed in the vault, and " +
+      "only ever returned masked.",
     inputSchema: {
       ...sessionField,
-      applicationId: z.string(),
-      fileForEin: z.boolean().default(true),
-      fullName: z.string().describe("Responsible party full name."),
-      ssnOrItin: z
-        .string()
-        .optional()
-        .describe("Sensitive. Sealed by the vault. Omit if the party has no US tax id."),
-      hasUsTaxId: z.boolean().default(true),
-      fiscalYearEndMonth: z.string().default("December"),
+      application_id: z.string(),
+      file_for_ein: z.boolean().default(true),
+      full_name: z.string().describe("Responsible party full name."),
+      has_us_tax_id: z.boolean().default(true),
+      fiscal_year_end_month: z.string().default("December"),
+      collect_ssn: z.boolean().default(false).describe("Securely elicit the SSN/ITIN from the user."),
+      ssn_or_itin: z.string().optional().describe("Fallback: pass SSN directly (sealed immediately)."),
     },
+    outputSchema: { success: z.boolean(), ssn_status: z.string() },
   },
-  async ({ sessionToken, applicationId, fileForEin, fullName, ssnOrItin, hasUsTaxId, fiscalYearEndMonth }) => {
+  async ({ session_token, application_id, file_for_ein, full_name, has_us_tax_id, fiscal_year_end_month, collect_ssn, ssn_or_itin }) => {
     try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      app.taxFiling.fileForEin = fileForEin;
-      app.taxFiling.fiscalYearEndMonth = fiscalYearEndMonth;
+      const app = loadOwnedApp(session_token, application_id);
+      assertUnlocked(app);
+      const ssn = await resolveSsn(full_name, ssn_or_itin, collect_ssn);
+      app.taxFiling.fileForEin = file_for_ein;
+      app.taxFiling.fiscalYearEndMonth = fiscal_year_end_month;
       app.taxFiling.responsibleParty = {
-        fullName,
-        ssnOrItin: ssnOrItin ? seal(ssnOrItin, "tax_id") : null,
-        hasUsTaxId,
+        fullName: full_name,
+        ssnOrItin: ssn.sealed,
+        hasUsTaxId: has_us_tax_id,
       };
       touch(app);
       updateApplication(app);
       return ok(
-        `EIN filing ${fileForEin ? "enabled" : "disabled"}; responsible party set to ${fullName}.` +
-          (app.taxFiling.responsibleParty.ssnOrItin
-            ? ` SSN/ITIN sealed as ${app.taxFiling.responsibleParty.ssnOrItin.masked}.`
-            : ""),
-        maskDeep(app.taxFiling)
+        `EIN filing ${file_for_ein ? "enabled" : "disabled"}; responsible party ${full_name}. ${ssn.note}`,
+        { success: true, ssn_status: ssn.status }
       );
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
     }
   }
 );
 
-// --- validate + submit -----------------------------------------------------
+// --- submit ----------------------------------------------------------------
 
 server.registerTool(
-  "validate_incorporation",
+  "atlas_formation_submit",
   {
-    title: "Validate the application",
+    title: "Submit the formation",
     description:
-      "Run Atlas-style completeness checks. Returns the list of blocking gaps; " +
-      "an empty list means the application is ready to submit.",
-    inputSchema: { ...sessionField, applicationId: z.string() },
-  },
-  async ({ sessionToken, applicationId }) => {
-    try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      const issues = validateApplication(app);
-      if (issues.length === 0) {
-        if (app.status === "in_progress") {
-          app.status = "ready_for_review";
-          updateApplication(app);
-        }
-        return ok("✓ Application is complete and ready to submit.", { issues: [], status: app.status });
-      }
-      return ok(`Found ${issues.length} item(s) to resolve before submitting.`, { issues });
-    } catch (e) {
-      return fail(asMessage(e));
-    }
-  }
-);
-
-server.registerTool(
-  "submit_incorporation",
-  {
-    title: "Submit the incorporation application",
-    description:
-      "Attest and submit the application for filing. Fails if any validation " +
-      "issues remain. This is the emulated equivalent of handing the package to " +
-      "Atlas for the Delaware filing.",
+      "Attest and submit the formation for filing. Fails if any blocking issues " +
+      "remain. This is the emulated equivalent of handing the package to Atlas " +
+      "for the Delaware filing. Irreversible — writes lock after submission.",
     inputSchema: {
       ...sessionField,
-      applicationId: z.string(),
-      signatoryName: z.string().describe("Name of the founder attesting to the filing."),
-      agreeToTerms: z.boolean().describe("Must be true to submit."),
+      application_id: z.string(),
+      signatory_name: z.string().describe("Name of the founder attesting to the filing."),
+      agree_to_terms: z.boolean().describe("Must be true to submit."),
     },
+    outputSchema: {
+      application_id: z.string(),
+      status: z.string(),
+      submitted_at: z.string().optional(),
+      blocking_issues: z.array(z.any()).optional(),
+    },
+    annotations: { destructiveHint: true },
   },
-  async ({ sessionToken, applicationId, signatoryName, agreeToTerms }) => {
+  async ({ session_token, application_id, signatory_name, agree_to_terms }) => {
     try {
-      const app = loadOwnedApp(sessionToken, applicationId);
-      if (!agreeToTerms) return fail("You must set agreeToTerms=true to submit.");
-      app.attestation = { agreedToTerms: true, signatoryName, signedAt: new Date().toISOString() };
+      const app = loadOwnedApp(session_token, application_id);
+      assertUnlocked(app);
+      if (!agree_to_terms) {
+        throw new AppError("VALIDATION_ERROR", "You must set agree_to_terms=true to submit.", {
+          field: "agree_to_terms",
+        });
+      }
+      app.attestation = { agreedToTerms: true, signatoryName: signatory_name, signedAt: new Date().toISOString() };
 
       const issues = validateApplication(app);
       if (issues.length > 0) {
-        // Persist the attestation but don't advance status.
-        updateApplication(app);
+        updateApplication(app); // persist attestation, but don't advance
         return ok(
-          `Cannot submit — ${issues.length} item(s) still need attention. ` +
-            `Run validate_incorporation for details.`,
-          { issues }
+          `Cannot submit — ${issues.length} item(s) still need attention. Run atlas_formation_status for details.`,
+          { application_id: app.id, status: app.status, blocking_issues: issues }
         );
       }
 
@@ -526,12 +773,12 @@ server.registerTool(
       app.submittedAt = new Date().toISOString();
       updateApplication(app);
       return ok(
-        `✓ Submitted ${fullCompanyName(app.company)} for Delaware C-Corp formation (emulated).\n` +
-          `Confirmation: ${app.id} • Submitted at ${app.submittedAt}.`,
-        { applicationId: app.id, status: app.status, submittedAt: app.submittedAt }
+        `✓ Submitted ${fullCompanyName(app.company)} for Delaware C-Corp formation (emulated). ` +
+          `Confirmation: ${app.id} • ${app.submittedAt}.`,
+        { application_id: app.id, status: app.status, submitted_at: app.submittedAt }
       );
     } catch (e) {
-      return fail(asMessage(e));
+      return errorResult(e);
     }
   }
 );
@@ -543,7 +790,8 @@ server.registerResource(
   "atlas://schema/delaware-c-corp",
   {
     title: "Delaware C-Corp field catalog",
-    description: "The full list of input fields for an Atlas Delaware C-Corp filing, with which are required and which are sensitive.",
+    description:
+      "The full list of input fields for an Atlas Delaware C-Corp filing, with which are required and which are sensitive.",
     mimeType: "application/json",
   },
   async (uri) => ({
@@ -556,14 +804,6 @@ server.registerResource(
     ],
   })
 );
-
-// --- error formatting ------------------------------------------------------
-
-function asMessage(e: unknown): string {
-  if (e instanceof AuthError) return e.message;
-  if (e instanceof Error) return e.message;
-  return String(e);
-}
 
 // --- boot ------------------------------------------------------------------
 

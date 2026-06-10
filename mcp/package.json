@@ -1,6 +1,6 @@
 {
   "name": "atlas-incorporation-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Proof-of-concept MCP server that replicates the Stripe Atlas Delaware C-Corp incorporation application as a set of agent-callable tools.",
